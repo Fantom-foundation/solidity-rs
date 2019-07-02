@@ -1,0 +1,8 @@
+[package]
+name = "solidity-rs"
+version = "0.1.0"
+authors = ["Samuel Marks <@SamuelMarks>"]
+license = "MIT"
+edition = "2018"
+
+[dependencies]
