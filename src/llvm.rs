@@ -11,7 +11,7 @@ use llvm_sys::core::{
     LLVMDisposeModule, LLVMFunctionType, LLVMGetIntTypeWidth, LLVMGetParam, LLVMGetReturnType,
     LLVMGetTypeKind, LLVMIntTypeInContext, LLVMModuleCreateWithNameInContext, LLVMPointerType,
     LLVMStructCreateNamed, LLVMStructSetBody, LLVMStructTypeInContext, LLVMTypeOf,
-    LLVMValueAsBasicBlock, LLVMVoidType,
+    LLVMValueAsBasicBlock, LLVMVoidType, LLVMBuildAShr, LLVMBuildShl, LLVMBuildXor, LLVMBuildFRem,
 };
 use llvm_sys::prelude::*;
 use llvm_sys::{LLVMBuilder, LLVMIntPredicate, LLVMModule, LLVMRealPredicate, LLVMTypeKind};
@@ -480,6 +480,79 @@ fn div(
     }
 }
 
+fn shl(
+    context: &mut Context,
+    kind: LLVMTypeKind,
+    left: LLVMValueRef,
+    right: LLVMValueRef,
+) -> LLVMValueRef {
+    unsafe {
+        LLVMBuildShl(
+            context.builder.builder,
+            left,
+            right,
+            context.module.new_string_ptr("SHL"),
+        )
+    }
+}
+
+fn shr(
+    context: &mut Context,
+    kind: LLVMTypeKind,
+    left: LLVMValueRef,
+    right: LLVMValueRef,
+) -> LLVMValueRef {
+    unsafe {
+        LLVMBuildAShr(
+            context.builder.builder,
+            left,
+            right,
+            context.module.new_string_ptr("SHR"),
+        )
+    }
+}
+
+fn rem(
+    context: &mut Context,
+    kind: LLVMTypeKind,
+    left: LLVMValueRef,
+    right: LLVMValueRef,
+) -> LLVMValueRef {
+    match kind {
+        /*
+        TODO: Handle signed integer.
+        LLVMTypeKind::LLVMIntegerTypeKind => unsafe {
+            LLVMBuildSub(context.builder.builder, left, right, context.module.new_string_ptr("sub integer"))
+        },
+        */
+        LLVMTypeKind::LLVMFloatTypeKind => unsafe {
+            LLVMBuildFRem(
+                context.builder.builder,
+                left,
+                right,
+                context.module.new_string_ptr("rem float"),
+            )
+        },
+        _ => panic!("How did you arrive here?"),
+    }
+}
+
+fn xor(
+    context: &mut Context,
+    kind: LLVMTypeKind,
+    left: LLVMValueRef,
+    right: LLVMValueRef,
+) -> LLVMValueRef {
+    unsafe {
+        LLVMBuildXor(
+            context.builder.builder,
+            left,
+            right,
+            context.module.new_string_ptr("SHR"),
+        )
+    }
+}
+
 impl<'a> CodeGenerator for BinaryExpression {
     fn codegen(&self, context: &mut Context) -> Result<LLVMValueRef, CodeGenerationError> {
         let common_type = type_cohesion(self.left.typegen(context)?, self.right.typegen(context)?)?;
@@ -566,13 +639,31 @@ impl<'a> CodeGenerator for BinaryExpression {
                 converted_left_value,
                 converted_right_value,
             )),
+            BinaryOperator::DoubleBiggerThan => Ok(shr(
+                context,
+                type_kind,
+                converted_left_value,
+                converted_right_value,
+            )),
             BinaryOperator::DoubleEquals => Ok(cmp(
                 context,
                 common_type,
                 converted_left_value,
                 converted_right_value,
             )),
+            BinaryOperator::DoubleLesserThan => Ok(shl(
+                context,
+                type_kind,
+                converted_left_value,
+                converted_right_value,
+            )),
             BinaryOperator::DoubleStar => Ok(pow(
+                context,
+                type_kind,
+                converted_left_value,
+                converted_right_value,
+            )),
+            BinaryOperator::Hat => Ok(xor(
                 context,
                 type_kind,
                 converted_left_value,
@@ -587,6 +678,12 @@ impl<'a> CodeGenerator for BinaryExpression {
             BinaryOperator::LesserThan => Ok(lt(
                 context,
                 common_type,
+                converted_left_value,
+                converted_right_value,
+            )),
+            BinaryOperator::Percent => Ok(rem(
+                context,
+                type_kind,
                 converted_left_value,
                 converted_right_value,
             )),
