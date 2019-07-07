@@ -1200,7 +1200,6 @@ pub enum RightUnaryOperator {
 pub enum BinaryOperator {
     Ampersand,
     AmpersandEquals,
-    Bang,
     BangEquals,
     Bar,
     BarEquals,

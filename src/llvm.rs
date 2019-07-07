@@ -12,6 +12,7 @@ use llvm_sys::core::{
     LLVMGetTypeKind, LLVMIntTypeInContext, LLVMModuleCreateWithNameInContext, LLVMPointerType,
     LLVMStructCreateNamed, LLVMStructSetBody, LLVMStructTypeInContext, LLVMTypeOf,
     LLVMValueAsBasicBlock, LLVMVoidType, LLVMBuildAShr, LLVMBuildShl, LLVMBuildXor, LLVMBuildFRem,
+    LLVMBuildInsertElement,
 };
 use llvm_sys::prelude::*;
 use llvm_sys::{LLVMBuilder, LLVMIntPredicate, LLVMModule, LLVMRealPredicate, LLVMTypeKind};
@@ -104,6 +105,8 @@ pub enum CodeGenerationError {
     ItemNotCallable,
     #[fail(display = "Argument not of expected kind {:?}", 0)]
     InvalidArgumentKind(LLVMTypeKind),
+    #[fail(display = "Expected lvalue, got rvalue.")]
+    ExpectedLValue,
 }
 
 pub struct Context {
@@ -568,15 +571,17 @@ impl<'a> CodeGenerator for BinaryExpression {
                     context.module.new_string_ptr("build and"),
                 )
             }),
-            // TODO: Side effect, save the left.
-            BinaryOperator::AmpersandEquals => Ok(unsafe {
-                LLVMBuildAnd(
-                    context.builder.builder,
-                    converted_left_value,
-                    converted_right_value,
-                    context.module.new_string_ptr("build and"),
-                )
-            }),
+            BinaryOperator::AmpersandEquals => {
+                let value = unsafe {
+                    LLVMBuildAnd(
+                        context.builder.builder,
+                        converted_left_value,
+                        converted_right_value,
+                        context.module.new_string_ptr("build and"),
+                    )
+                };
+                self.perform_expression_side_effects(context, value)
+            },
             BinaryOperator::BangEquals => Ok(not_cmp(
                 context,
                 common_type,
@@ -591,15 +596,17 @@ impl<'a> CodeGenerator for BinaryExpression {
                     context.module.new_string_ptr("build or"),
                 )
             }),
-            // TODO: Side effect, save the left.
-            BinaryOperator::BarEquals => Ok(unsafe {
-                LLVMBuildOr(
-                    context.builder.builder,
-                    converted_left_value,
-                    converted_right_value,
-                    context.module.new_string_ptr("build or"),
-                )
-            }),
+            BinaryOperator::BarEquals => {
+                let value = unsafe {
+                    LLVMBuildOr(
+                        context.builder.builder,
+                        converted_left_value,
+                        converted_right_value,
+                        context.module.new_string_ptr("build or"),
+                    )
+                };
+                self.perform_expression_side_effects(context, value)
+            },
             BinaryOperator::BiggerOrEqualsThan => Ok(ge(
                 context,
                 common_type,
@@ -618,6 +625,15 @@ impl<'a> CodeGenerator for BinaryExpression {
                 converted_left_value,
                 converted_right_value,
             )),
+            BinaryOperator::DashEquals => {
+                let value = sub(
+                    context,
+                    type_kind,
+                    converted_left_value,
+                    converted_right_value,
+                );
+                self.perform_expression_side_effects(context, value)
+            }
             BinaryOperator::DoubleAmpersand => {
                 let not_converted_left_value = unsafe {
                     LLVMBuildNeg(
@@ -645,6 +661,15 @@ impl<'a> CodeGenerator for BinaryExpression {
                 converted_left_value,
                 converted_right_value,
             )),
+            BinaryOperator::DoubleBiggerThanEquals => {
+                let value = shr(
+                    context,
+                    type_kind,
+                    converted_left_value,
+                    converted_right_value,
+                );
+                self.perform_expression_side_effects(context, value)
+            },
             BinaryOperator::DoubleEquals => Ok(cmp(
                 context,
                 common_type,
@@ -657,18 +682,40 @@ impl<'a> CodeGenerator for BinaryExpression {
                 converted_left_value,
                 converted_right_value,
             )),
+            BinaryOperator::DoubleLesserThanEquals => {
+                let value = shl(
+                    context,
+                    type_kind,
+                    converted_left_value,
+                    converted_right_value,
+                );
+                self.perform_expression_side_effects(context, value)
+            },
             BinaryOperator::DoubleStar => Ok(pow(
                 context,
                 type_kind,
                 converted_left_value,
                 converted_right_value,
             )),
+            BinaryOperator::Equals => {
+                let value = self.right.codegen(context)?;
+                self.perform_expression_side_effects(context, value)
+            },
             BinaryOperator::Hat => Ok(xor(
                 context,
                 type_kind,
                 converted_left_value,
                 converted_right_value,
             )),
+            BinaryOperator::HatEquals => {
+                let value = xor(
+                    context,
+                    type_kind,
+                    converted_left_value,
+                    converted_right_value,
+                );
+                self.perform_expression_side_effects(context, value)
+            }
             BinaryOperator::LesserOrEqualsThan => Ok(le(
                 context,
                 common_type,
@@ -687,28 +734,64 @@ impl<'a> CodeGenerator for BinaryExpression {
                 converted_left_value,
                 converted_right_value,
             )),
+            BinaryOperator::PercentEquals => {
+                let value = rem(
+                    context,
+                    type_kind,
+                    converted_left_value,
+                    converted_right_value,
+                );
+                self.perform_expression_side_effects(context, value)
+            },
             BinaryOperator::Plus => Ok(add(
                 context,
                 type_kind,
                 converted_left_value,
                 converted_right_value,
             )),
+            BinaryOperator::PlusEquals => {
+                let value = add(
+                    context,
+                    type_kind,
+                    converted_left_value,
+                    converted_right_value,
+                );
+                self.perform_expression_side_effects(context, value)
+            },
             BinaryOperator::Slash => Ok(div(
                 context,
                 type_kind,
                 converted_left_value,
                 converted_right_value,
             )),
+            BinaryOperator::SlashEquals => {
+                let value = div(
+                    context,
+                    type_kind,
+                    converted_left_value,
+                    converted_right_value,
+                );
+                self.perform_expression_side_effects(context, value)
+            },
             BinaryOperator::Star => Ok(multiply(
                 context,
                 type_kind,
                 converted_left_value,
                 converted_right_value,
             )),
-            _ => unimplemented!(),
+            BinaryOperator::StarEquals => {
+                let value = multiply(
+                    context,
+                    type_kind,
+                    converted_left_value,
+                    converted_right_value,
+                );
+                self.perform_expression_side_effects(context, value)
+            },
         }
     }
 }
+
 
 impl<'a> CodeGenerator for Literal {
     fn codegen(&self, context: &mut Context) -> Result<LLVMValueRef, CodeGenerationError> {
@@ -1734,4 +1817,29 @@ fn hash_function(context: &mut Context) -> LLVMValueRef {
     };
     let _block = unsafe { LLVMAppendBasicBlock(function, context.module.new_string_ptr("entry")) };
     function
+}
+
+impl BinaryExpression {
+    fn perform_expression_side_effects(&self, context: &mut Context, value: LLVMValueRef) -> Result<LLVMValueRef, CodeGenerationError> {
+        match &*self.left {
+            Expression::PrimaryExpression(PrimaryExpression::Identifier(id)) => {
+                context.symbols.insert(
+                    id.0.to_owned(),
+                    value,
+                );
+                Ok(())
+            },
+            Expression::IndexAccess(array_expression, member_expression) => {
+                let vec_val = array_expression.codegen(context)?;
+                let ind_val = member_expression.codegen(context)?;
+                unsafe {
+                    LLVMBuildInsertElement(context.builder.builder, vec_val, value, ind_val, context.module.new_string_ptr("Update array in &="))
+                };
+                Ok(())
+            },
+            // TODO: Side effect for dictionaries and structs too
+            _ => Err(CodeGenerationError::ExpectedLValue),
+        }?;
+        Ok(value)
+    }
 }
