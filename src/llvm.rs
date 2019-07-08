@@ -1045,9 +1045,62 @@ impl<'a> TypeGenerator for Expression {
     }
 }
 
+impl<'a> CodeGenerator for SimpleStatement {
+    fn codegen(&self, context: &mut Context) -> Result<LLVMValueRef, CodeGenerationError> {
+        match self {
+            SimpleStatement::ExpressionStatement(e) => e.codegen(context),
+            SimpleStatement::VariableDefinition(vs, v) => {
+                let t = vs.0[0].type_name.typegen(context)?;
+                let value = if let Some(e) = v {
+                    e.codegen(context)?
+                } else {
+                    unsafe {
+                        LLVMConstNull(t)
+                    }
+                };
+                for v in &vs.0 {
+                    context.symbols.insert(
+                        v.identifier.0.to_owned(),
+                        value.clone(),
+                    );
+                }
+                Ok(value)
+            },
+        }
+    }
+}
+
 impl<'a> CodeGenerator for Statement {
-    fn codegen(&self, _context: &mut Context) -> Result<LLVMValueRef, CodeGenerationError> {
-        unimplemented!()
+    fn codegen(&self, context: &mut Context) -> Result<LLVMValueRef, CodeGenerationError> {
+        match self {
+            Statement::Block(b) => {
+                b.iter().fold(Ok(unsafe {
+                    LLVMConstNull(uint(context, 1))
+                }), |_, s| {
+                    s.codegen(context)
+                })
+            },
+            Statement::IfStatement(is) => {
+                let condition = is.condition.codegen(context)?;
+                let if_branch = unsafe {
+                    LLVMValueAsBasicBlock(is.true_branch.codegen(context)?)
+                };
+                let else_branch = if let Some(e) = &is.false_branch {
+                    unsafe {
+                        LLVMValueAsBasicBlock(e.codegen(context)?)
+                    }
+                } else {
+                    unsafe {
+                        LLVMValueAsBasicBlock(LLVMConstNull(uint(context, 1)))
+                    }
+                };
+                Ok(unsafe {
+                    LLVMBuildCondBr(context.builder.builder, condition, if_branch, else_branch)
+                })
+            },
+            Statement::SimpleStatement(ss) => ss.codegen(context),
+            _ => unimplemented!(),
+        }
     }
 }
 

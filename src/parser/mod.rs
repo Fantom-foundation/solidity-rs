@@ -494,13 +494,13 @@ named!(variable_declaration_element<&str, VariableDeclaration>, ws!(do_parse!(
 )));
 named!(variable_declaration_tail<&str, Vec<VariableDeclaration>>,
     many0!(variable_declaration_element));
-named!(variable_declaration_list<&str, Vec<VariableDeclaration>>, do_parse!(
+named!(variable_declaration_list<&str, NonEmpty<VariableDeclaration>>, do_parse!(
     first: variable_declaration_element >>
     tail:  variable_declaration_tail >>
     ({
         let mut vec = vec![first];
         vec.extend(tail);
-        vec
+        NonEmpty(vec)
     })
 ));
 named!(initialized_variable_definition<&str, SimpleStatement>, ws!(do_parse!(
@@ -1024,7 +1024,7 @@ pub enum Statement {
 #[derive(Clone)]
 pub enum SimpleStatement {
     ExpressionStatement(Expression),
-    VariableDefinition(Vec<VariableDeclaration>, Option<Expression>),
+    VariableDefinition(NonEmpty<VariableDeclaration>, Option<Expression>),
 }
 
 #[derive(Clone)]
@@ -1167,14 +1167,14 @@ pub enum ImportDirective {
 
 #[derive(Clone)]
 pub struct IfStatement {
-    condition: Expression,
-    true_branch: Box<Statement>,
-    false_branch: Option<Box<Statement>>,
+    pub condition: Expression,
+    pub true_branch: Box<Statement>,
+    pub false_branch: Option<Box<Statement>>,
 }
 
 #[derive(Clone)]
 pub struct VariableDeclaration {
-    identifier: Identifier,
+    pub identifier: Identifier,
     storage: Option<Storage>,
     pub type_name: TypeName,
 }
