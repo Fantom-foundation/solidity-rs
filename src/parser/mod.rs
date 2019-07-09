@@ -1081,7 +1081,7 @@ pub struct ModifierDefinition {
 #[derive(Clone)]
 pub struct FunctionDefinition {
     pub body: Option<Block>,
-    modifiers: Vec<FunctionDefinitionModifier>,
+    pub modifiers: Vec<FunctionDefinitionModifier>,
     pub name: Option<Identifier>,
     pub parameters: Vec<Parameter>,
     pub return_values: Vec<Parameter>,

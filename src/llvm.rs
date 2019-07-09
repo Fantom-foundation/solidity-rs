@@ -107,6 +107,10 @@ pub enum CodeGenerationError {
     InvalidArgumentKind(LLVMTypeKind),
     #[fail(display = "Expected lvalue, got rvalue.")]
     ExpectedLValue,
+    #[fail(display = "Invalid placeholder")]
+    InvalidPlaceholder,
+    #[fail(display = "Modifier call with no function call")]
+    ModifierCallWithoutFunctionCall,
 }
 
 pub struct Context {
@@ -115,6 +119,8 @@ pub struct Context {
     builder: Builder,
     symbols: HashMap<String, LLVMValueRef>,
     type_symbols: HashMap<String, LLVMTypeRef>,
+    function_modifiers: HashMap<LLVMValueRef, Vec<FunctionDefinitionModifier>>,
+    function_modifiers_stack: Vec<LLVMValueRef>,
 }
 
 impl Context {
@@ -126,6 +132,8 @@ impl Context {
             builder: Builder::new(context),
             symbols: HashMap::new(),
             type_symbols: HashMap::new(),
+            function_modifiers: HashMap::new(),
+            function_modifiers_stack: Vec::new(),
         })
     }
     pub fn print_to_file(&self, _file: &str) -> Result<(), Vec<String>> {
@@ -1099,6 +1107,8 @@ impl<'a> CodeGenerator for Statement {
                 })
             },
             Statement::SimpleStatement(ss) => ss.codegen(context),
+            Statement::PlaceholderStatement =>
+                context.function_modifiers_stack.pop().ok_or(CodeGenerationError::InvalidPlaceholder),
             _ => unimplemented!(),
         }
     }
@@ -1125,15 +1135,17 @@ impl<'a> CodeGenerator for FunctionCall {
         if unsafe { LLVMGetTypeKind(function_type) } == LLVMTypeKind::LLVMFunctionTypeKind {
             let function = self.callee.codegen(context)?;
             let mut arguments = function_call_arguments_to_values(context, &self.arguments)?;
-            unsafe {
-                Ok(LLVMBuildCall(
+            let function_call = unsafe {
+                LLVMBuildCall(
                     context.builder.builder,
                     function,
                     arguments.as_mut_ptr(),
                     arguments.len() as u32,
                     context.module.new_string_ptr("tmpcall"),
-                ))
-            }
+                )
+            };
+            context.function_modifiers_stack.push(function_call);
+            Ok(function_call)
         } else {
             Err(CodeGenerationError::ExpectingFunctionExpression)
         }
@@ -1339,27 +1351,6 @@ fn type_from_type_name(
 impl TypeGenerator for TypeName {
     fn typegen(&self, context: &mut Context) -> Result<LLVMTypeRef, CodeGenerationError> {
         Ok(type_from_type_name(self, context)?)
-    }
-}
-
-impl TypeGenerator for ModifierDefinition {
-    fn typegen(&self, context: &mut Context) -> Result<LLVMTypeRef, CodeGenerationError> {
-        let return_type = uint(context, 1);
-        let mut parameter_types = match &self.parameters {
-            Some(p) => p
-                .iter()
-                .map(|p| type_from_type_name(&p.type_name, context).unwrap())
-                .collect::<Vec<LLVMTypeRef>>(),
-            None => vec![],
-        };
-        Ok(unsafe {
-            LLVMFunctionType(
-                return_type,
-                parameter_types.as_mut_ptr(),
-                parameter_types.len() as u32,
-                LLVM_FALSE,
-            )
-        })
     }
 }
 
@@ -1618,6 +1609,15 @@ impl CodeGenerator for ModifierDefinition {
     }
 }
 
+impl TypeGenerator for ModifierDefinition {
+    fn typegen(&self, context: &mut Context) -> Result<LLVMTypeRef, CodeGenerationError> {
+        let v = context.function_modifiers_stack.last().ok_or(CodeGenerationError::ModifierCallWithoutFunctionCall)?.clone();
+        Ok(unsafe {
+            LLVMTypeOf(v)
+        })
+    }
+}
+
 impl CodeGenerator for FunctionDefinition {
     fn codegen(&self, context: &mut Context) -> Result<LLVMValueRef, CodeGenerationError> {
         let prototype = self.typegen(context)?;
@@ -1654,6 +1654,11 @@ impl CodeGenerator for FunctionDefinition {
             LLVMVerifyFunction(function, LLVMVerifierFailureAction::LLVMPrintMessageAction)
         };
         if result == 0 {
+            context.function_modifiers.insert(function, self.modifiers.clone());;
+            if let Some(id) = &self.name {
+                context.symbols.insert(id.0.to_owned(), function);
+                context.type_symbols.insert(id.0.to_owned(), prototype);
+            }
             Ok(function)
         } else {
             Err(CodeGenerationError::InvalidFunction)
