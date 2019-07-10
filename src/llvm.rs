@@ -1134,6 +1134,20 @@ impl<'a> CodeGenerator for FunctionCall {
         let function_type = self.callee.typegen(context)?;
         if unsafe { LLVMGetTypeKind(function_type) } == LLVMTypeKind::LLVMFunctionTypeKind {
             let function = self.callee.codegen(context)?;
+            let modifiers = context.function_modifiers
+                .get(&function)
+                .unwrap_or(&Vec::new())
+                .clone();
+            let modifier_definitions = modifiers
+                .into_iter()
+                .filter_map(|fdm| {
+                    if let FunctionDefinitionModifier::ModifierInvocation(mi) = fdm {
+                        Some(mi)
+                    } else {
+                        None
+                    }
+                })
+                .collect::<Vec<ModifierInvocation>>();
             let mut arguments = function_call_arguments_to_values(context, &self.arguments)?;
             let function_call = unsafe {
                 LLVMBuildCall(
@@ -1611,9 +1625,25 @@ impl CodeGenerator for ModifierDefinition {
 
 impl TypeGenerator for ModifierDefinition {
     fn typegen(&self, context: &mut Context) -> Result<LLVMTypeRef, CodeGenerationError> {
-        let v = context.function_modifiers_stack.last().ok_or(CodeGenerationError::ModifierCallWithoutFunctionCall)?.clone();
+        let f = unsafe {
+            LLVMTypeOf(context.function_modifiers_stack.last().ok_or(CodeGenerationError::ModifierCallWithoutFunctionCall)?.clone())
+        };
+        let r = unsafe {
+            LLVMGetReturnType(f)
+        };
+        let mut parameter_types = self
+            .parameters.as_ref()
+            .unwrap_or(&Vec::new())
+            .iter()
+            .map(|p| type_from_type_name(&p.type_name, context).unwrap())
+            .collect::<Vec<LLVMTypeRef>>();
         Ok(unsafe {
-            LLVMTypeOf(v)
+            LLVMFunctionType(
+                r,
+                parameter_types.as_mut_ptr(),
+                parameter_types.len() as u32,
+                LLVM_FALSE,
+            )
         })
     }
 }
