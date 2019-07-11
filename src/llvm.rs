@@ -111,6 +111,8 @@ pub enum CodeGenerationError {
     InvalidPlaceholder,
     #[fail(display = "Modifier call with no function call")]
     ModifierCallWithoutFunctionCall,
+    #[fail(display = "Modifier doesn't exist")]
+    ModifierDoesntExist,
 }
 
 pub struct Context {
@@ -1129,6 +1131,26 @@ fn function_call_arguments_to_values(
     }
 }
 
+impl<'a> CodeGenerator for ModifierInvocation {
+    fn codegen(&self, context: &mut Context) -> Result<LLVMValueRef, CodeGenerationError> {
+        let mut arguments = self.arguments.iter()
+            .map(|a| a.codegen(context))
+            .collect::<Result<Vec<LLVMValueRef>, CodeGenerationError>>()?;
+        let modifier = context.symbols.get(&self.name.0.to_owned())
+            .ok_or(CodeGenerationError::ModifierDoesntExist)?
+            .clone();
+        Ok(unsafe {
+            LLVMBuildCall(
+                context.builder.builder,
+                modifier,
+                arguments.as_mut_ptr(),
+                arguments.len() as u32,
+                context.module.new_string_ptr("tmpmodifiercall"),
+            )
+        })
+    }
+}
+
 impl<'a> CodeGenerator for FunctionCall {
     fn codegen(&self, context: &mut Context) -> Result<LLVMValueRef, CodeGenerationError> {
         let function_type = self.callee.typegen(context)?;
@@ -1138,7 +1160,7 @@ impl<'a> CodeGenerator for FunctionCall {
                 .get(&function)
                 .unwrap_or(&Vec::new())
                 .clone();
-            let modifier_definitions = modifiers
+            let modifier_invocations = modifiers
                 .into_iter()
                 .filter_map(|fdm| {
                     if let FunctionDefinitionModifier::ModifierInvocation(mi) = fdm {
@@ -1149,7 +1171,8 @@ impl<'a> CodeGenerator for FunctionCall {
                 })
                 .collect::<Vec<ModifierInvocation>>();
             let mut arguments = function_call_arguments_to_values(context, &self.arguments)?;
-            let function_call = unsafe {
+            let mut function_calls = Vec::new();
+            function_calls.push(unsafe {
                 LLVMBuildCall(
                     context.builder.builder,
                     function,
@@ -1157,9 +1180,13 @@ impl<'a> CodeGenerator for FunctionCall {
                     arguments.len() as u32,
                     context.module.new_string_ptr("tmpcall"),
                 )
-            };
-            context.function_modifiers_stack.push(function_call);
-            Ok(function_call)
+            });
+            for mi in modifier_invocations.iter() {
+                function_calls.push(mi.codegen(context)?);
+            }
+            let return_call = function_calls.pop().unwrap();
+            context.function_modifiers_stack.extend(function_calls);
+            Ok(return_call)
         } else {
             Err(CodeGenerationError::ExpectingFunctionExpression)
         }

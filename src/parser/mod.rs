@@ -1119,8 +1119,8 @@ pub enum FunctionDefinitionModifier {
 
 #[derive(Clone)]
 pub struct ModifierInvocation {
-    name: Identifier,
-    arguments: Vec<Expression>,
+    pub name: Identifier,
+    pub arguments: Vec<Expression>,
 }
 
 #[derive(Clone)]
