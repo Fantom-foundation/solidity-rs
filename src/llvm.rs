@@ -2,17 +2,17 @@ use crate::parser::*;
 use failure::Error;
 use llvm_sys::analysis::{LLVMVerifierFailureAction, LLVMVerifyFunction};
 use llvm_sys::core::{
-    LLVMAddFunction, LLVMAppendBasicBlock, LLVMArrayType, LLVMBuildAdd, LLVMBuildAnd,
-    LLVMBuildCall, LLVMBuildCondBr, LLVMBuildFAdd, LLVMBuildFCmp, LLVMBuildFDiv, LLVMBuildFMul,
-    LLVMBuildFSub, LLVMBuildGlobalStringPtr, LLVMBuildICmp, LLVMBuildMul, LLVMBuildNeg,
-    LLVMBuildOr, LLVMBuildRet, LLVMBuildSub, LLVMConstArray, LLVMConstInt,
-    LLVMConstIntGetZExtValue, LLVMConstNull, LLVMConstStruct, LLVMConstStructInContext,
-    LLVMContextCreate, LLVMContextDispose, LLVMCreateBuilderInContext, LLVMDisposeBuilder,
-    LLVMDisposeModule, LLVMFunctionType, LLVMGetIntTypeWidth, LLVMGetParam, LLVMGetReturnType,
-    LLVMGetTypeKind, LLVMIntTypeInContext, LLVMModuleCreateWithNameInContext, LLVMPointerType,
+    LLVMAddFunction, LLVMAppendBasicBlock, LLVMArrayType, LLVMBuildAShr, LLVMBuildAdd,
+    LLVMBuildAnd, LLVMBuildCall, LLVMBuildCondBr, LLVMBuildFAdd, LLVMBuildFCmp, LLVMBuildFDiv,
+    LLVMBuildFMul, LLVMBuildFRem, LLVMBuildFSub, LLVMBuildGlobalStringPtr, LLVMBuildICmp,
+    LLVMBuildInsertElement, LLVMBuildMul, LLVMBuildNeg, LLVMBuildOr, LLVMBuildRet, LLVMBuildShl,
+    LLVMBuildSub, LLVMBuildXor, LLVMConstArray, LLVMConstInt, LLVMConstIntGetZExtValue,
+    LLVMConstNull, LLVMConstStruct, LLVMConstStructInContext, LLVMContextCreate,
+    LLVMContextDispose, LLVMCreateBuilderInContext, LLVMDisposeBuilder, LLVMDisposeModule,
+    LLVMFunctionType, LLVMGetIntTypeWidth, LLVMGetParam, LLVMGetReturnType, LLVMGetTypeKind,
+    LLVMIntTypeInContext, LLVMModuleCreateWithNameInContext, LLVMPointerType,
     LLVMStructCreateNamed, LLVMStructSetBody, LLVMStructTypeInContext, LLVMTypeOf,
-    LLVMValueAsBasicBlock, LLVMVoidType, LLVMBuildAShr, LLVMBuildShl, LLVMBuildXor, LLVMBuildFRem,
-    LLVMBuildInsertElement,
+    LLVMValueAsBasicBlock, LLVMVoidType,
 };
 use llvm_sys::prelude::*;
 use llvm_sys::{LLVMBuilder, LLVMIntPredicate, LLVMModule, LLVMRealPredicate, LLVMTypeKind};
@@ -365,15 +365,13 @@ fn pow(
     right: LLVMValueRef,
 ) -> LLVMValueRef {
     match kind {
-        LLVMTypeKind::LLVMIntegerTypeKind => {
-            unsafe {
-                LLVMBuildMul(
-                    context.builder.builder,
-                    left,
-                    right,
-                    context.module.new_string_ptr("multiply integer"),
-                )
-            }
+        LLVMTypeKind::LLVMIntegerTypeKind => unsafe {
+            LLVMBuildMul(
+                context.builder.builder,
+                left,
+                right,
+                context.module.new_string_ptr("multiply integer"),
+            )
         },
         LLVMTypeKind::LLVMFloatTypeKind => unsafe {
             LLVMBuildFMul(
@@ -591,7 +589,7 @@ impl<'a> CodeGenerator for BinaryExpression {
                     )
                 };
                 self.perform_expression_side_effects(context, value)
-            },
+            }
             BinaryOperator::BangEquals => Ok(not_cmp(
                 context,
                 common_type,
@@ -616,7 +614,7 @@ impl<'a> CodeGenerator for BinaryExpression {
                     )
                 };
                 self.perform_expression_side_effects(context, value)
-            },
+            }
             BinaryOperator::BiggerOrEqualsThan => Ok(ge(
                 context,
                 common_type,
@@ -679,7 +677,7 @@ impl<'a> CodeGenerator for BinaryExpression {
                     converted_right_value,
                 );
                 self.perform_expression_side_effects(context, value)
-            },
+            }
             BinaryOperator::DoubleEquals => Ok(cmp(
                 context,
                 common_type,
@@ -700,7 +698,7 @@ impl<'a> CodeGenerator for BinaryExpression {
                     converted_right_value,
                 );
                 self.perform_expression_side_effects(context, value)
-            },
+            }
             BinaryOperator::DoubleStar => Ok(pow(
                 context,
                 type_kind,
@@ -710,7 +708,7 @@ impl<'a> CodeGenerator for BinaryExpression {
             BinaryOperator::Equals => {
                 let value = self.right.codegen(context)?;
                 self.perform_expression_side_effects(context, value)
-            },
+            }
             BinaryOperator::Hat => Ok(xor(
                 context,
                 type_kind,
@@ -752,7 +750,7 @@ impl<'a> CodeGenerator for BinaryExpression {
                     converted_right_value,
                 );
                 self.perform_expression_side_effects(context, value)
-            },
+            }
             BinaryOperator::Plus => Ok(add(
                 context,
                 type_kind,
@@ -767,7 +765,7 @@ impl<'a> CodeGenerator for BinaryExpression {
                     converted_right_value,
                 );
                 self.perform_expression_side_effects(context, value)
-            },
+            }
             BinaryOperator::Slash => Ok(div(
                 context,
                 type_kind,
@@ -782,7 +780,7 @@ impl<'a> CodeGenerator for BinaryExpression {
                     converted_right_value,
                 );
                 self.perform_expression_side_effects(context, value)
-            },
+            }
             BinaryOperator::Star => Ok(multiply(
                 context,
                 type_kind,
@@ -797,11 +795,10 @@ impl<'a> CodeGenerator for BinaryExpression {
                     converted_right_value,
                 );
                 self.perform_expression_side_effects(context, value)
-            },
+            }
         }
     }
 }
-
 
 impl<'a> CodeGenerator for Literal {
     fn codegen(&self, context: &mut Context) -> Result<LLVMValueRef, CodeGenerationError> {
@@ -1064,18 +1061,15 @@ impl<'a> CodeGenerator for SimpleStatement {
                 let value = if let Some(e) = v {
                     e.codegen(context)?
                 } else {
-                    unsafe {
-                        LLVMConstNull(t)
-                    }
+                    unsafe { LLVMConstNull(t) }
                 };
                 for v in &vs.0 {
-                    context.symbols.insert(
-                        v.identifier.0.to_owned(),
-                        value.clone(),
-                    );
+                    context
+                        .symbols
+                        .insert(v.identifier.0.to_owned(), value.clone());
                 }
                 Ok(value)
-            },
+            }
         }
     }
 }
@@ -1083,34 +1077,28 @@ impl<'a> CodeGenerator for SimpleStatement {
 impl<'a> CodeGenerator for Statement {
     fn codegen(&self, context: &mut Context) -> Result<LLVMValueRef, CodeGenerationError> {
         match self {
-            Statement::Block(b) => {
-                b.iter().fold(Ok(unsafe {
-                    LLVMConstNull(uint(context, 1))
-                }), |_, s| {
+            Statement::Block(b) => b
+                .iter()
+                .fold(Ok(unsafe { LLVMConstNull(uint(context, 1)) }), |_, s| {
                     s.codegen(context)
-                })
-            },
+                }),
             Statement::IfStatement(is) => {
                 let condition = is.condition.codegen(context)?;
-                let if_branch = unsafe {
-                    LLVMValueAsBasicBlock(is.true_branch.codegen(context)?)
-                };
+                let if_branch = unsafe { LLVMValueAsBasicBlock(is.true_branch.codegen(context)?) };
                 let else_branch = if let Some(e) = &is.false_branch {
-                    unsafe {
-                        LLVMValueAsBasicBlock(e.codegen(context)?)
-                    }
+                    unsafe { LLVMValueAsBasicBlock(e.codegen(context)?) }
                 } else {
-                    unsafe {
-                        LLVMValueAsBasicBlock(LLVMConstNull(uint(context, 1)))
-                    }
+                    unsafe { LLVMValueAsBasicBlock(LLVMConstNull(uint(context, 1))) }
                 };
                 Ok(unsafe {
                     LLVMBuildCondBr(context.builder.builder, condition, if_branch, else_branch)
                 })
-            },
+            }
             Statement::SimpleStatement(ss) => ss.codegen(context),
-            Statement::PlaceholderStatement =>
-                context.function_modifiers_stack.pop().ok_or(CodeGenerationError::InvalidPlaceholder),
+            Statement::PlaceholderStatement => context
+                .function_modifiers_stack
+                .pop()
+                .ok_or(CodeGenerationError::InvalidPlaceholder),
             _ => unimplemented!(),
         }
     }
@@ -1133,10 +1121,14 @@ fn function_call_arguments_to_values(
 
 impl<'a> CodeGenerator for ModifierInvocation {
     fn codegen(&self, context: &mut Context) -> Result<LLVMValueRef, CodeGenerationError> {
-        let mut arguments = self.arguments.iter()
+        let mut arguments = self
+            .arguments
+            .iter()
             .map(|a| a.codegen(context))
             .collect::<Result<Vec<LLVMValueRef>, CodeGenerationError>>()?;
-        let modifier = context.symbols.get(&self.name.0.to_owned())
+        let modifier = context
+            .symbols
+            .get(&self.name.0.to_owned())
             .ok_or(CodeGenerationError::ModifierDoesntExist)?
             .clone();
         Ok(unsafe {
@@ -1156,7 +1148,8 @@ impl<'a> CodeGenerator for FunctionCall {
         let function_type = self.callee.typegen(context)?;
         if unsafe { LLVMGetTypeKind(function_type) } == LLVMTypeKind::LLVMFunctionTypeKind {
             let function = self.callee.codegen(context)?;
-            let modifiers = context.function_modifiers
+            let modifiers = context
+                .function_modifiers
                 .get(&function)
                 .unwrap_or(&Vec::new())
                 .clone();
@@ -1653,13 +1646,18 @@ impl CodeGenerator for ModifierDefinition {
 impl TypeGenerator for ModifierDefinition {
     fn typegen(&self, context: &mut Context) -> Result<LLVMTypeRef, CodeGenerationError> {
         let f = unsafe {
-            LLVMTypeOf(context.function_modifiers_stack.last().ok_or(CodeGenerationError::ModifierCallWithoutFunctionCall)?.clone())
+            LLVMTypeOf(
+                context
+                    .function_modifiers_stack
+                    .last()
+                    .ok_or(CodeGenerationError::ModifierCallWithoutFunctionCall)?
+                    .clone(),
+            )
         };
-        let r = unsafe {
-            LLVMGetReturnType(f)
-        };
+        let r = unsafe { LLVMGetReturnType(f) };
         let mut parameter_types = self
-            .parameters.as_ref()
+            .parameters
+            .as_ref()
             .unwrap_or(&Vec::new())
             .iter()
             .map(|p| type_from_type_name(&p.type_name, context).unwrap())
@@ -1711,7 +1709,9 @@ impl CodeGenerator for FunctionDefinition {
             LLVMVerifyFunction(function, LLVMVerifierFailureAction::LLVMPrintMessageAction)
         };
         if result == 0 {
-            context.function_modifiers.insert(function, self.modifiers.clone());;
+            context
+                .function_modifiers
+                .insert(function, self.modifiers.clone());;
             if let Some(id) = &self.name {
                 context.symbols.insert(id.0.to_owned(), function);
                 context.type_symbols.insert(id.0.to_owned(), prototype);
@@ -1935,23 +1935,30 @@ fn hash_function(context: &mut Context) -> LLVMValueRef {
 }
 
 impl BinaryExpression {
-    fn perform_expression_side_effects(&self, context: &mut Context, value: LLVMValueRef) -> Result<LLVMValueRef, CodeGenerationError> {
+    fn perform_expression_side_effects(
+        &self,
+        context: &mut Context,
+        value: LLVMValueRef,
+    ) -> Result<LLVMValueRef, CodeGenerationError> {
         match &*self.left {
             Expression::PrimaryExpression(PrimaryExpression::Identifier(id)) => {
-                context.symbols.insert(
-                    id.0.to_owned(),
-                    value,
-                );
+                context.symbols.insert(id.0.to_owned(), value);
                 Ok(())
-            },
+            }
             Expression::IndexAccess(array_expression, member_expression) => {
                 let vec_val = array_expression.codegen(context)?;
                 let ind_val = member_expression.codegen(context)?;
                 unsafe {
-                    LLVMBuildInsertElement(context.builder.builder, vec_val, value, ind_val, context.module.new_string_ptr("Update array in &="))
+                    LLVMBuildInsertElement(
+                        context.builder.builder,
+                        vec_val,
+                        value,
+                        ind_val,
+                        context.module.new_string_ptr("Update array in &="),
+                    )
                 };
                 Ok(())
-            },
+            }
             // TODO: Side effect for dictionaries and structs too
             _ => Err(CodeGenerationError::ExpectedLValue),
         }?;
