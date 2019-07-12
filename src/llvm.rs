@@ -1,19 +1,7 @@
 use crate::parser::*;
 use failure::Error;
 use llvm_sys::analysis::{LLVMVerifierFailureAction, LLVMVerifyFunction};
-use llvm_sys::core::{
-    LLVMAddFunction, LLVMAppendBasicBlock, LLVMArrayType, LLVMBuildAShr, LLVMBuildAdd,
-    LLVMBuildAnd, LLVMBuildCall, LLVMBuildCondBr, LLVMBuildFAdd, LLVMBuildFCmp, LLVMBuildFDiv,
-    LLVMBuildFMul, LLVMBuildFRem, LLVMBuildFSub, LLVMBuildGlobalStringPtr, LLVMBuildICmp,
-    LLVMBuildInsertElement, LLVMBuildMul, LLVMBuildNeg, LLVMBuildOr, LLVMBuildRet, LLVMBuildShl,
-    LLVMBuildSub, LLVMBuildXor, LLVMConstArray, LLVMConstInt, LLVMConstIntGetZExtValue,
-    LLVMConstNull, LLVMConstStruct, LLVMConstStructInContext, LLVMContextCreate,
-    LLVMContextDispose, LLVMCreateBuilderInContext, LLVMDisposeBuilder, LLVMDisposeModule,
-    LLVMFunctionType, LLVMGetIntTypeWidth, LLVMGetParam, LLVMGetReturnType, LLVMGetTypeKind,
-    LLVMIntTypeInContext, LLVMModuleCreateWithNameInContext, LLVMPointerType,
-    LLVMStructCreateNamed, LLVMStructSetBody, LLVMStructTypeInContext, LLVMTypeOf,
-    LLVMValueAsBasicBlock, LLVMVoidType,
-};
+use llvm_sys::core::{LLVMAddFunction, LLVMAppendBasicBlock, LLVMArrayType, LLVMBuildAShr, LLVMBuildAdd, LLVMBuildAnd, LLVMBuildCall, LLVMBuildCondBr, LLVMBuildFAdd, LLVMBuildFCmp, LLVMBuildFDiv, LLVMBuildFMul, LLVMBuildFRem, LLVMBuildFSub, LLVMBuildGlobalStringPtr, LLVMBuildICmp, LLVMBuildInsertElement, LLVMBuildMul, LLVMBuildNeg, LLVMBuildOr, LLVMBuildRet, LLVMBuildShl, LLVMBuildSub, LLVMBuildXor, LLVMConstArray, LLVMConstInt, LLVMConstIntGetZExtValue, LLVMConstNull, LLVMConstStruct, LLVMConstStructInContext, LLVMContextCreate, LLVMContextDispose, LLVMCreateBuilderInContext, LLVMDisposeBuilder, LLVMDisposeModule, LLVMFunctionType, LLVMGetIntTypeWidth, LLVMGetParam, LLVMGetReturnType, LLVMGetTypeKind, LLVMIntTypeInContext, LLVMModuleCreateWithNameInContext, LLVMPointerType, LLVMStructCreateNamed, LLVMStructSetBody, LLVMStructTypeInContext, LLVMTypeOf, LLVMValueAsBasicBlock, LLVMVoidType, LLVMGetInsertBlock, LLVMGetBasicBlockParent, LLVMAppendBasicBlockInContext, LLVMBuildBr};
 use llvm_sys::prelude::*;
 use llvm_sys::{LLVMBuilder, LLVMIntPredicate, LLVMModule, LLVMRealPredicate, LLVMTypeKind};
 use std::collections::HashMap;
@@ -1082,6 +1070,27 @@ impl<'a> CodeGenerator for Statement {
                 .fold(Ok(unsafe { LLVMConstNull(uint(context, 1)) }), |_, s| {
                     s.codegen(context)
                 }),
+            // TODO: FunctionCall is Event agnostic and this will likely fail.
+            Statement::Emit(f) => f.codegen(context),
+            Statement::ForStatement(start, condition, end, body) => {
+                let start_value = match start {
+                    Some(v) => Some(v.codegen(context)?),
+                    None => None,
+                };
+                let pre_header = unsafe {
+                    LLVMGetInsertBlock(context.builder.builder)
+                };
+                let function = unsafe {
+                    LLVMGetBasicBlockParent(pre_header)
+                };
+                let bb = unsafe {
+                    LLVMAppendBasicBlockInContext(context.context, function, context.module.new_string_ptr("for loop"))
+                };
+                unsafe {
+                    LLVMBuildBr(context.builder.builder, bb)
+                };
+                unimplemented!()
+            }
             Statement::IfStatement(is) => {
                 let condition = is.condition.codegen(context)?;
                 let if_branch = unsafe { LLVMValueAsBasicBlock(is.true_branch.codegen(context)?) };
