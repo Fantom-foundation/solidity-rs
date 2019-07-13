@@ -1,7 +1,7 @@
 use crate::parser::*;
 use failure::Error;
 use llvm_sys::analysis::{LLVMVerifierFailureAction, LLVMVerifyFunction};
-use llvm_sys::core::{LLVMAddFunction, LLVMAppendBasicBlock, LLVMArrayType, LLVMBuildAShr, LLVMBuildAdd, LLVMBuildAnd, LLVMBuildCall, LLVMBuildCondBr, LLVMBuildFAdd, LLVMBuildFCmp, LLVMBuildFDiv, LLVMBuildFMul, LLVMBuildFRem, LLVMBuildFSub, LLVMBuildGlobalStringPtr, LLVMBuildICmp, LLVMBuildInsertElement, LLVMBuildMul, LLVMBuildNeg, LLVMBuildOr, LLVMBuildRet, LLVMBuildShl, LLVMBuildSub, LLVMBuildXor, LLVMConstArray, LLVMConstInt, LLVMConstIntGetZExtValue, LLVMConstNull, LLVMConstStruct, LLVMConstStructInContext, LLVMContextCreate, LLVMContextDispose, LLVMCreateBuilderInContext, LLVMDisposeBuilder, LLVMDisposeModule, LLVMFunctionType, LLVMGetIntTypeWidth, LLVMGetParam, LLVMGetReturnType, LLVMGetTypeKind, LLVMIntTypeInContext, LLVMModuleCreateWithNameInContext, LLVMPointerType, LLVMStructCreateNamed, LLVMStructSetBody, LLVMStructTypeInContext, LLVMTypeOf, LLVMValueAsBasicBlock, LLVMVoidType, LLVMGetInsertBlock, LLVMGetBasicBlockParent, LLVMAppendBasicBlockInContext, LLVMBuildBr};
+use llvm_sys::core::{LLVMAddFunction, LLVMAppendBasicBlock, LLVMArrayType, LLVMBuildAShr, LLVMBuildAdd, LLVMBuildAnd, LLVMBuildCall, LLVMBuildCondBr, LLVMBuildFAdd, LLVMBuildFCmp, LLVMBuildFDiv, LLVMBuildFMul, LLVMBuildFRem, LLVMBuildFSub, LLVMBuildGlobalStringPtr, LLVMBuildICmp, LLVMBuildInsertElement, LLVMBuildMul, LLVMBuildNeg, LLVMBuildOr, LLVMBuildRet, LLVMBuildShl, LLVMBuildSub, LLVMBuildXor, LLVMConstArray, LLVMConstInt, LLVMConstIntGetZExtValue, LLVMConstNull, LLVMConstStruct, LLVMConstStructInContext, LLVMContextCreate, LLVMContextDispose, LLVMCreateBuilderInContext, LLVMDisposeBuilder, LLVMDisposeModule, LLVMFunctionType, LLVMGetIntTypeWidth, LLVMGetParam, LLVMGetReturnType, LLVMGetTypeKind, LLVMIntTypeInContext, LLVMModuleCreateWithNameInContext, LLVMPointerType, LLVMStructCreateNamed, LLVMStructSetBody, LLVMStructTypeInContext, LLVMTypeOf, LLVMValueAsBasicBlock, LLVMVoidType, LLVMGetInsertBlock, LLVMGetBasicBlockParent, LLVMAppendBasicBlockInContext, LLVMBuildBr, LLVMPositionBuilderAtEnd, LLVMBuildPhi, LLVMAddIncoming};
 use llvm_sys::prelude::*;
 use llvm_sys::{LLVMBuilder, LLVMIntPredicate, LLVMModule, LLVMRealPredicate, LLVMTypeKind};
 use std::collections::HashMap;
@@ -1073,10 +1073,20 @@ impl<'a> CodeGenerator for Statement {
             // TODO: FunctionCall is Event agnostic and this will likely fail.
             Statement::Emit(f) => f.codegen(context),
             Statement::ForStatement(start, condition, end, body) => {
+                let start_value_type = match start {
+                    Some(SimpleStatement::ExpressionStatement(e)) => Some(e.typegen(context)?),
+                    Some(SimpleStatement::VariableDefinition(_, Some(e))) => Some(e.typegen(context)?),
+                    _ => None
+                }
+                    .unwrap_or(uint(context, 0));
                 let start_value = match start {
-                    Some(v) => Some(v.codegen(context)?),
-                    None => None,
-                };
+                    Some(SimpleStatement::ExpressionStatement(e)) => Some(e.codegen(context)?),
+                    Some(SimpleStatement::VariableDefinition(_, Some(e))) => Some(e.codegen(context)?),
+                    _ => None
+                }
+                    .unwrap_or(unsafe {
+                        LLVMConstNull(start_value_type)
+                    });
                 let pre_header = unsafe {
                     LLVMGetInsertBlock(context.builder.builder)
                 };
@@ -1087,7 +1097,46 @@ impl<'a> CodeGenerator for Statement {
                     LLVMAppendBasicBlockInContext(context.context, function, context.module.new_string_ptr("for loop"))
                 };
                 unsafe {
-                    LLVMBuildBr(context.builder.builder, bb)
+                    LLVMBuildBr(context.builder.builder, bb);
+                    LLVMPositionBuilderAtEnd(context.builder.builder, bb);
+                };
+                let phi = unsafe {
+                    LLVMBuildPhi(context.builder.builder, start_value_type, context.module.new_string_ptr("phi for loop"))
+                };
+                unsafe {
+                    LLVMAddIncoming(
+                        phi,
+                        vec![start_value].as_mut_ptr(),
+                        vec![bb].as_mut_ptr(),
+                        1,
+                    )
+                };
+                let old_value = match start {
+                    Some(SimpleStatement::VariableDefinition(vs, _)) => {
+                        let res = Some(
+                            vs.0.iter()
+                                .map(|v| context.symbols[&v.identifier.0.to_string()].clone())
+                                .collect::<Vec<LLVMValueRef>>()
+                        );
+                        for v in vs.0.iter() {
+                            context.symbols.insert(v.identifier.0.to_string(), start_value);
+                        }
+                        res
+                    },
+                    _ => None,
+                };
+                body.codegen(context)?;
+                let step = match end {
+                    Some(e) => e.codegen(context)?,
+                    None => unsafe {
+                        LLVMConstNull(uint(context, 0))
+                    },
+                };
+                let cond = match condition {
+                    Some(c) => c.codegen(context)?,
+                    None => unsafe {
+                        LLVMConstNull(uint(context, 0))
+                    },
                 };
                 unimplemented!()
             }
