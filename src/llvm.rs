@@ -1,7 +1,7 @@
 use crate::parser::*;
 use failure::Error;
 use llvm_sys::analysis::{LLVMVerifierFailureAction, LLVMVerifyFunction};
-use llvm_sys::core::{LLVMAddFunction, LLVMAppendBasicBlock, LLVMArrayType, LLVMBuildAShr, LLVMBuildAdd, LLVMBuildAnd, LLVMBuildCall, LLVMBuildCondBr, LLVMBuildFAdd, LLVMBuildFCmp, LLVMBuildFDiv, LLVMBuildFMul, LLVMBuildFRem, LLVMBuildFSub, LLVMBuildGlobalStringPtr, LLVMBuildICmp, LLVMBuildInsertElement, LLVMBuildMul, LLVMBuildNeg, LLVMBuildOr, LLVMBuildRet, LLVMBuildShl, LLVMBuildSub, LLVMBuildXor, LLVMConstArray, LLVMConstInt, LLVMConstIntGetZExtValue, LLVMConstNull, LLVMConstStruct, LLVMConstStructInContext, LLVMContextCreate, LLVMContextDispose, LLVMCreateBuilderInContext, LLVMDisposeBuilder, LLVMDisposeModule, LLVMFunctionType, LLVMGetIntTypeWidth, LLVMGetParam, LLVMGetReturnType, LLVMGetTypeKind, LLVMIntTypeInContext, LLVMModuleCreateWithNameInContext, LLVMPointerType, LLVMStructCreateNamed, LLVMStructSetBody, LLVMStructTypeInContext, LLVMTypeOf, LLVMValueAsBasicBlock, LLVMVoidType, LLVMGetInsertBlock, LLVMGetBasicBlockParent, LLVMAppendBasicBlockInContext, LLVMBuildBr, LLVMPositionBuilderAtEnd, LLVMBuildPhi, LLVMAddIncoming};
+use llvm_sys::core::{LLVMAddFunction, LLVMAppendBasicBlock, LLVMArrayType, LLVMBuildAShr, LLVMBuildAdd, LLVMBuildAnd, LLVMBuildCall, LLVMBuildCondBr, LLVMBuildFAdd, LLVMBuildFCmp, LLVMBuildFDiv, LLVMBuildFMul, LLVMBuildFRem, LLVMBuildFSub, LLVMBuildGlobalStringPtr, LLVMBuildICmp, LLVMBuildInsertElement, LLVMBuildMul, LLVMBuildNeg, LLVMBuildOr, LLVMBuildRet, LLVMBuildShl, LLVMBuildSub, LLVMBuildXor, LLVMConstArray, LLVMConstInt, LLVMConstIntGetZExtValue, LLVMConstNull, LLVMConstStruct, LLVMConstStructInContext, LLVMContextCreate, LLVMContextDispose, LLVMCreateBuilderInContext, LLVMDisposeBuilder, LLVMDisposeModule, LLVMFunctionType, LLVMGetIntTypeWidth, LLVMGetParam, LLVMGetReturnType, LLVMGetTypeKind, LLVMIntTypeInContext, LLVMModuleCreateWithNameInContext, LLVMPointerType, LLVMStructCreateNamed, LLVMStructSetBody, LLVMStructTypeInContext, LLVMTypeOf, LLVMValueAsBasicBlock, LLVMVoidType, LLVMGetInsertBlock, LLVMGetBasicBlockParent, LLVMAppendBasicBlockInContext, LLVMBuildBr, LLVMPositionBuilderAtEnd, LLVMBuildPhi, LLVMAddIncoming, LLVMConstUIToFP, LLVMInsertBasicBlockInContext};
 use llvm_sys::prelude::*;
 use llvm_sys::{LLVMBuilder, LLVMIntPredicate, LLVMModule, LLVMRealPredicate, LLVMTypeKind};
 use std::collections::HashMap;
@@ -939,6 +939,35 @@ impl<'a> TypeGenerator for FunctionCall {
     }
 }
 
+fn type_coalescing_to_boolean(context: &mut Context, value: LLVMValueRef) -> LLVMValueRef {
+    let value_type = unsafe { LLVMTypeOf(value) };
+    let kind = unsafe { LLVMGetTypeKind(value_type) };
+    match kind {
+        LLVMTypeKind::LLVMIntegerTypeKind => unsafe {
+            LLVMBuildICmp(
+                context.builder.builder,
+                LLVMIntPredicate::LLVMIntNE,
+                LLVMConstInt(value_type, 0, LLVM_FALSE),
+                value,
+                context.module.new_string_ptr("coalesce to boolean"),
+            )
+        },
+        LLVMTypeKind::LLVMFloatTypeKind => unsafe {
+            LLVMBuildFCmp(
+                context.builder.builder,
+                LLVMRealPredicate::LLVMRealONE,
+                LLVMConstUIToFP(
+                    LLVMConstInt(uint(context, 1), 0, LLVM_FALSE),
+                    value_type,
+                ),
+                value,
+                context.module.new_string_ptr("coalesce to boolean"),
+            )
+        },
+        _ => panic!("We are not using this type kind"),
+    }
+}
+
 fn type_cohesion(
     left_type: LLVMTypeRef,
     right_type: LLVMTypeRef,
@@ -1138,7 +1167,56 @@ impl<'a> CodeGenerator for Statement {
                         LLVMConstNull(uint(context, 0))
                     },
                 };
-                unimplemented!()
+                let cond_boolean = type_coalescing_to_boolean(context, cond);
+                let loop_end = unsafe {
+                    LLVMGetInsertBlock(context.builder.builder)
+                };
+                let after_loop = unsafe {
+                    LLVMAppendBasicBlockInContext(
+                        context.context,
+                        function,
+                        context.module.new_string_ptr("after loop bb")
+                    )
+                };
+                let cond_branch = unsafe {
+                    LLVMBuildCondBr(
+                        context.builder.builder,
+                        cond_boolean,
+                        bb,
+                        after_loop,
+                    )
+                };
+                unsafe {
+                    LLVMInsertBasicBlockInContext(
+                        context.context,
+                        after_loop,
+                        context.module.new_string_ptr("where new code goes"),
+                    )
+                };
+                unsafe {
+                    LLVMAddIncoming(
+                        phi,
+                        vec![step].as_mut_ptr(),
+                        vec![loop_end].as_mut_ptr(),
+                        1,
+                    )
+                };
+                match start {
+                    Some(SimpleStatement::VariableDefinition(vs, Some(_))) => {
+                        for (vd, value) in vs.0.iter().zip(old_value.unwrap().iter()) {
+                            context.symbols.insert(vd.identifier.0.to_string(), value.clone());
+                        }
+                    },
+                    Some(SimpleStatement::VariableDefinition(vs, None)) => {
+                        for v in vs.0.iter() {
+                            context.symbols.remove(v.identifier.as_str());
+                        }
+                    },
+                    _ => {},
+                };
+                Ok(unsafe {
+                    LLVMConstNull(uint(context, 0))
+                })
             }
             Statement::IfStatement(is) => {
                 let condition = is.condition.codegen(context)?;
