@@ -1,9 +1,9 @@
 use crate::parser::*;
 use failure::Error;
 use llvm_sys::analysis::{LLVMVerifierFailureAction, LLVMVerifyFunction};
-use llvm_sys::core::{LLVMAddFunction, LLVMAppendBasicBlock, LLVMArrayType, LLVMBuildAShr, LLVMBuildAdd, LLVMBuildAnd, LLVMBuildCall, LLVMBuildCondBr, LLVMBuildFAdd, LLVMBuildFCmp, LLVMBuildFDiv, LLVMBuildFMul, LLVMBuildFRem, LLVMBuildFSub, LLVMBuildGlobalStringPtr, LLVMBuildICmp, LLVMBuildInsertElement, LLVMBuildMul, LLVMBuildNeg, LLVMBuildOr, LLVMBuildRet, LLVMBuildShl, LLVMBuildSub, LLVMBuildXor, LLVMConstArray, LLVMConstInt, LLVMConstIntGetZExtValue, LLVMConstNull, LLVMConstStruct, LLVMConstStructInContext, LLVMContextCreate, LLVMContextDispose, LLVMCreateBuilderInContext, LLVMDisposeBuilder, LLVMDisposeModule, LLVMFunctionType, LLVMGetIntTypeWidth, LLVMGetParam, LLVMGetReturnType, LLVMGetTypeKind, LLVMIntTypeInContext, LLVMModuleCreateWithNameInContext, LLVMPointerType, LLVMStructCreateNamed, LLVMStructSetBody, LLVMStructTypeInContext, LLVMTypeOf, LLVMValueAsBasicBlock, LLVMVoidType, LLVMGetInsertBlock, LLVMGetBasicBlockParent, LLVMAppendBasicBlockInContext, LLVMBuildBr, LLVMPositionBuilderAtEnd, LLVMBuildPhi, LLVMAddIncoming, LLVMConstUIToFP, LLVMInsertBasicBlockInContext};
+use llvm_sys::core::{LLVMAddFunction, LLVMAppendBasicBlock, LLVMArrayType, LLVMBuildAShr, LLVMBuildAdd, LLVMBuildAnd, LLVMBuildCall, LLVMBuildCondBr, LLVMBuildFAdd, LLVMBuildFCmp, LLVMBuildFDiv, LLVMBuildFMul, LLVMBuildFRem, LLVMBuildFSub, LLVMBuildGlobalStringPtr, LLVMBuildICmp, LLVMBuildInsertElement, LLVMBuildMul, LLVMBuildNeg, LLVMBuildOr, LLVMBuildRet, LLVMBuildShl, LLVMBuildSub, LLVMBuildXor, LLVMConstArray, LLVMConstInt, LLVMConstIntGetZExtValue, LLVMConstNull, LLVMConstStruct, LLVMConstStructInContext, LLVMContextCreate, LLVMContextDispose, LLVMCreateBuilderInContext, LLVMDisposeBuilder, LLVMDisposeModule, LLVMFunctionType, LLVMGetIntTypeWidth, LLVMGetParam, LLVMGetReturnType, LLVMGetTypeKind, LLVMIntTypeInContext, LLVMModuleCreateWithNameInContext, LLVMPointerType, LLVMStructCreateNamed, LLVMStructSetBody, LLVMStructTypeInContext, LLVMTypeOf, LLVMValueAsBasicBlock, LLVMVoidType, LLVMGetInsertBlock, LLVMGetBasicBlockParent, LLVMAppendBasicBlockInContext, LLVMBuildBr, LLVMPositionBuilderAtEnd, LLVMBuildPhi, LLVMAddIncoming, LLVMConstUIToFP, LLVMInsertBasicBlockInContext, LLVMBasicBlockAsValue};
 use llvm_sys::prelude::*;
-use llvm_sys::{LLVMBuilder, LLVMIntPredicate, LLVMModule, LLVMRealPredicate, LLVMTypeKind};
+use llvm_sys::{LLVMBuilder, LLVMIntPredicate, LLVMModule, LLVMRealPredicate, LLVMTypeKind, LLVMBasicBlock};
 use std::collections::HashMap;
 use std::ffi::CString;
 use std::str::FromStr;
@@ -101,6 +101,8 @@ pub enum CodeGenerationError {
     ModifierCallWithoutFunctionCall,
     #[fail(display = "Modifier doesn't exist")]
     ModifierDoesntExist,
+    #[fail(display = "No loop active")]
+    NoLoopActive,
 }
 
 pub struct Context {
@@ -111,6 +113,7 @@ pub struct Context {
     type_symbols: HashMap<String, LLVMTypeRef>,
     function_modifiers: HashMap<LLVMValueRef, Vec<FunctionDefinitionModifier>>,
     function_modifiers_stack: Vec<LLVMValueRef>,
+    loop_stack: Vec<(LLVMBasicBlockRef, LLVMBasicBlockRef)>,
 }
 
 impl Context {
@@ -124,6 +127,7 @@ impl Context {
             type_symbols: HashMap::new(),
             function_modifiers: HashMap::new(),
             function_modifiers_stack: Vec::new(),
+            loop_stack: Vec::new(),
         })
     }
     pub fn print_to_file(&self, _file: &str) -> Result<(), Vec<String>> {
@@ -1099,6 +1103,24 @@ impl<'a> CodeGenerator for Statement {
                 .fold(Ok(unsafe { LLVMConstNull(uint(context, 1)) }), |_, s| {
                     s.codegen(context)
                 }),
+            Statement::Break => {
+                let e = if let Some((_, e)) = context.loop_stack.last() {
+                    Ok(e.clone())
+                } else {
+                    Err(CodeGenerationError::NoLoopActive)
+                }?;
+                context.loop_stack.pop();
+                Ok(unsafe {
+                    LLVMBasicBlockAsValue(e)
+                })
+            },
+            Statement::Continue => if let Some((c, _)) = context.loop_stack.last() {
+                Ok(unsafe {
+                    LLVMBasicBlockAsValue(c.clone())
+                })
+            } else {
+                Err(CodeGenerationError::NoLoopActive)
+            },
             // TODO: FunctionCall is Event agnostic and this will likely fail.
             Statement::Emit(f) => f.codegen(context),
             Statement::ForStatement(start, condition, end, body) => {
@@ -1214,6 +1236,8 @@ impl<'a> CodeGenerator for Statement {
                     },
                     _ => {},
                 };
+                // TODO: Update this when we leave the loop
+                context.loop_stack.push((bb.clone(), loop_end.clone()));
                 Ok(unsafe {
                     LLVMConstNull(uint(context, 0))
                 })

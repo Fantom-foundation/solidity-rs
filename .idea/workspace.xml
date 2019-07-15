@@ -13,7 +13,6 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="4dfbd6eb-84b2-433c-9451-7330f410a18c" name="Default Changelist" comment="">
-      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/llvm.rs" beforeDir="false" afterPath="$PROJECT_DIR$/src/llvm.rs" afterDir="false" />
     </list>
     <option name="EXCLUDED_CONVERTED_TO_IGNORED" value="true" />
@@ -44,17 +43,17 @@
       <file pinned="false" current-in-tab="true">
         <entry file="file://$PROJECT_DIR$/src/llvm.rs">
           <provider selected="true" editor-type-id="text-editor">
-            <state relative-caret-position="68">
-              <caret line="1214" column="24" selection-start-line="1214" selection-start-column="24" selection-end-line="1214" selection-end-column="24" />
+            <state relative-caret-position="306">
+              <caret line="1117" column="27" selection-start-line="1117" selection-start-column="27" selection-end-line="1117" selection-end-column="27" />
               <folding>
                 <element signature="e#1927#1928#0" expanded="true" />
                 <element signature="e#1968#1969#0" expanded="true" />
                 <element signature="e#2605#2606#0" expanded="true" />
                 <element signature="e#2663#2664#0" expanded="true" />
-                <element signature="e#4847#4848#0" expanded="true" />
-                <element signature="e#4868#4869#0" expanded="true" />
-                <element signature="e#4920#4921#0" expanded="true" />
-                <element signature="e#4979#4980#0" expanded="true" />
+                <element signature="e#5035#5036#0" expanded="true" />
+                <element signature="e#5056#5057#0" expanded="true" />
+                <element signature="e#5108#5109#0" expanded="true" />
+                <element signature="e#5167#5168#0" expanded="true" />
               </folding>
             </state>
           </provider>
@@ -63,8 +62,8 @@
       <file pinned="false" current-in-tab="false">
         <entry file="file://$USER_HOME$/.cargo/registry/src/github.com-1ecc6299db9ec823/llvm-sys-70.2.0/src/core.rs">
           <provider selected="true" editor-type-id="text-editor">
-            <state relative-caret-position="-493">
-              <caret line="326" column="25" selection-start-line="326" selection-start-column="25" selection-end-line="326" selection-end-column="25" />
+            <state relative-caret-position="-5338">
+              <caret line="374" selection-start-line="374" selection-end-line="374" />
             </state>
           </provider>
         </entry>
@@ -164,12 +163,12 @@
       <option name="number" value="Default" />
       <option name="presentableId" value="Default" />
       <updated>1562424316120</updated>
-      <workItem from="1562424317209" duration="20519000" />
+      <workItem from="1562424317209" duration="22057000" />
     </task>
     <servers />
   </component>
   <component name="TimeTrackingManager">
-    <option name="totallyTimeSpent" value="20519000" />
+    <option name="totallyTimeSpent" value="22057000" />
   </component>
   <component name="ToolWindowManager">
     <frame x="0" y="0" width="1920" height="1048" extended-state="0" />
@@ -216,24 +215,24 @@
     </entry>
     <entry file="file://$USER_HOME$/.cargo/registry/src/github.com-1ecc6299db9ec823/llvm-sys-70.2.0/src/core.rs">
       <provider selected="true" editor-type-id="text-editor">
-        <state relative-caret-position="-493">
-          <caret line="326" column="25" selection-start-line="326" selection-start-column="25" selection-end-line="326" selection-end-column="25" />
+        <state relative-caret-position="-5338">
+          <caret line="374" selection-start-line="374" selection-end-line="374" />
         </state>
       </provider>
     </entry>
     <entry file="file://$PROJECT_DIR$/src/llvm.rs">
       <provider selected="true" editor-type-id="text-editor">
-        <state relative-caret-position="68">
-          <caret line="1214" column="24" selection-start-line="1214" selection-start-column="24" selection-end-line="1214" selection-end-column="24" />
+        <state relative-caret-position="306">
+          <caret line="1117" column="27" selection-start-line="1117" selection-start-column="27" selection-end-line="1117" selection-end-column="27" />
           <folding>
             <element signature="e#1927#1928#0" expanded="true" />
             <element signature="e#1968#1969#0" expanded="true" />
             <element signature="e#2605#2606#0" expanded="true" />
             <element signature="e#2663#2664#0" expanded="true" />
-            <element signature="e#4847#4848#0" expanded="true" />
-            <element signature="e#4868#4869#0" expanded="true" />
-            <element signature="e#4920#4921#0" expanded="true" />
-            <element signature="e#4979#4980#0" expanded="true" />
+            <element signature="e#5035#5036#0" expanded="true" />
+            <element signature="e#5056#5057#0" expanded="true" />
+            <element signature="e#5108#5109#0" expanded="true" />
+            <element signature="e#5167#5168#0" expanded="true" />
           </folding>
         </state>
       </provider>
