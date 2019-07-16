@@ -1259,6 +1259,16 @@ impl<'a> CodeGenerator for Statement {
                 .function_modifiers_stack
                 .pop()
                 .ok_or(CodeGenerationError::InvalidPlaceholder),
+            Statement::Return(Some(e)) => {
+                let e = e.codegen(context)?;
+                unsafe { LLVMBuildRet(context.builder.builder, e) };
+                Ok(e)
+            },
+            Statement::Return(None) => {
+                let v = unsafe { LLVMConstNull(uint(context, 0)) };
+                unsafe { LLVMBuildRet(context.builder.builder, v) };
+                Ok(v)
+            },
             _ => unimplemented!(),
         }
     }
@@ -1856,15 +1866,12 @@ impl CodeGenerator for FunctionDefinition {
             };
         }
         let return_type = self.return_values.typegen(context)?;
-        let return_value = match &self.body {
-            Some(b) => b
-                .iter()
-                .fold(unsafe { LLVMConstNull(return_type) }, |_r, s| {
-                    s.codegen(context).unwrap()
-                }),
-            None => unsafe { LLVMConstNull(return_type) },
-        };
-        unsafe { LLVMBuildRet(context.builder.builder, return_value) };
+        self.body.iter().for_each(|ss| {
+            for s in ss {
+                s.codegen(context).unwrap();
+            }
+        });
+        unsafe { LLVMBuildRet(context.builder.builder, LLVMConstNull(uint(context, 0)))};
         let result = unsafe {
             LLVMVerifyFunction(function, LLVMVerifierFailureAction::LLVMPrintMessageAction)
         };
