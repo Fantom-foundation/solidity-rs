@@ -3,7 +3,7 @@ use failure::Error;
 use llvm_sys::analysis::{LLVMVerifierFailureAction, LLVMVerifyFunction};
 use llvm_sys::core::{LLVMAddFunction, LLVMAppendBasicBlock, LLVMArrayType, LLVMBuildAShr, LLVMBuildAdd, LLVMBuildAnd, LLVMBuildCall, LLVMBuildCondBr, LLVMBuildFAdd, LLVMBuildFCmp, LLVMBuildFDiv, LLVMBuildFMul, LLVMBuildFRem, LLVMBuildFSub, LLVMBuildGlobalStringPtr, LLVMBuildICmp, LLVMBuildInsertElement, LLVMBuildMul, LLVMBuildNeg, LLVMBuildOr, LLVMBuildRet, LLVMBuildShl, LLVMBuildSub, LLVMBuildXor, LLVMConstArray, LLVMConstInt, LLVMConstIntGetZExtValue, LLVMConstNull, LLVMConstStruct, LLVMConstStructInContext, LLVMContextCreate, LLVMContextDispose, LLVMCreateBuilderInContext, LLVMDisposeBuilder, LLVMDisposeModule, LLVMFunctionType, LLVMGetIntTypeWidth, LLVMGetParam, LLVMGetReturnType, LLVMGetTypeKind, LLVMIntTypeInContext, LLVMModuleCreateWithNameInContext, LLVMPointerType, LLVMStructCreateNamed, LLVMStructSetBody, LLVMStructTypeInContext, LLVMTypeOf, LLVMValueAsBasicBlock, LLVMVoidType, LLVMGetInsertBlock, LLVMGetBasicBlockParent, LLVMAppendBasicBlockInContext, LLVMBuildBr, LLVMPositionBuilderAtEnd, LLVMBuildPhi, LLVMAddIncoming, LLVMConstUIToFP, LLVMInsertBasicBlockInContext, LLVMBasicBlockAsValue};
 use llvm_sys::prelude::*;
-use llvm_sys::{LLVMBuilder, LLVMIntPredicate, LLVMModule, LLVMRealPredicate, LLVMTypeKind, LLVMBasicBlock};
+use llvm_sys::{LLVMBuilder, LLVMIntPredicate, LLVMModule, LLVMRealPredicate, LLVMTypeKind};
 use std::collections::HashMap;
 use std::ffi::CString;
 use std::str::FromStr;
@@ -485,7 +485,6 @@ fn div(
 
 fn shl(
     context: &mut Context,
-    kind: LLVMTypeKind,
     left: LLVMValueRef,
     right: LLVMValueRef,
 ) -> LLVMValueRef {
@@ -501,7 +500,6 @@ fn shl(
 
 fn shr(
     context: &mut Context,
-    kind: LLVMTypeKind,
     left: LLVMValueRef,
     right: LLVMValueRef,
 ) -> LLVMValueRef {
@@ -542,7 +540,6 @@ fn rem(
 
 fn xor(
     context: &mut Context,
-    kind: LLVMTypeKind,
     left: LLVMValueRef,
     right: LLVMValueRef,
 ) -> LLVMValueRef {
@@ -657,14 +654,12 @@ impl<'a> CodeGenerator for BinaryExpression {
             )),
             BinaryOperator::DoubleBiggerThan => Ok(shr(
                 context,
-                type_kind,
                 converted_left_value,
                 converted_right_value,
             )),
             BinaryOperator::DoubleBiggerThanEquals => {
                 let value = shr(
                     context,
-                    type_kind,
                     converted_left_value,
                     converted_right_value,
                 );
@@ -678,14 +673,12 @@ impl<'a> CodeGenerator for BinaryExpression {
             )),
             BinaryOperator::DoubleLesserThan => Ok(shl(
                 context,
-                type_kind,
                 converted_left_value,
                 converted_right_value,
             )),
             BinaryOperator::DoubleLesserThanEquals => {
                 let value = shl(
                     context,
-                    type_kind,
                     converted_left_value,
                     converted_right_value,
                 );
@@ -703,14 +696,12 @@ impl<'a> CodeGenerator for BinaryExpression {
             }
             BinaryOperator::Hat => Ok(xor(
                 context,
-                type_kind,
                 converted_left_value,
                 converted_right_value,
             )),
             BinaryOperator::HatEquals => {
                 let value = xor(
                     context,
-                    type_kind,
                     converted_left_value,
                     converted_right_value,
                 );
@@ -925,7 +916,7 @@ impl<'a> TypeGenerator for PrimaryExpression {
                 };
                 Ok(tuple_type)
             }
-            PrimaryExpression::Identifier(id) => Ok(unsafe { LLVMTypeOf(self.codegen(context)?) }),
+            PrimaryExpression::Identifier(_) => Ok(unsafe { LLVMTypeOf(self.codegen(context)?) }),
             PrimaryExpression::ElementaryTypeName(etn) => etn.typegen(context),
             PrimaryExpression::Literal(l) => l.typegen(context),
         }
@@ -1200,7 +1191,7 @@ impl<'a> CodeGenerator for Statement {
                         context.module.new_string_ptr("after loop bb")
                     )
                 };
-                let cond_branch = unsafe {
+                let _cond_branch = unsafe {
                     LLVMBuildCondBr(
                         context.builder.builder,
                         cond_boolean,
@@ -1865,7 +1856,6 @@ impl CodeGenerator for FunctionDefinition {
                 None => {}
             };
         }
-        let return_type = self.return_values.typegen(context)?;
         self.body.iter().for_each(|ss| {
             for s in ss {
                 s.codegen(context).unwrap();
