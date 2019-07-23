@@ -873,7 +873,8 @@ impl<'a> CodeGenerator for Expression {
             Expression::BinaryExpression(be) => be.codegen(context),
             Expression::MemberAccess(_object, _property) => unimplemented!(),
             Expression::IndexAccess(_collection, _index) => unimplemented!(),
-            Expression::NewExpression(_tn) => unimplemented!(),
+            Expression::NewExpression(tn) =>
+                Ok(default_value(context, tn)?.clone()),
         }
     }
 }
@@ -1611,14 +1612,16 @@ impl TypeGenerator for StructDefinition {
             .iter()
             .map(|p| type_from_type_name(&p.type_name, context).unwrap())
             .collect::<Vec<LLVMTypeRef>>();
-        Ok(unsafe {
+        let ty = unsafe {
             LLVMStructTypeInContext(
                 context.context,
                 struct_types.as_mut_ptr(),
                 struct_types.len() as u32,
                 LLVM_TRUE,
             )
-        })
+        };
+        context.type_symbols.insert(self.name.as_str().to_string(), ty);
+        Ok(ty)
     }
 }
 
@@ -1896,8 +1899,14 @@ impl<'a> CodeGenerator for EventDefinition {
 
 impl<'a> CodeGenerator for StructDefinition {
     fn codegen(&self, context: &mut Context) -> Result<LLVMValueRef, CodeGenerationError> {
-        let t = self.typegen(context)?;
-        Ok(unsafe { LLVMConstNull(t) })
+        let mut values = self.variables.0.iter()
+            .map(|vd| default_value(context, &vd.type_name).unwrap())
+            .collect::<Vec<LLVMValueRef>>();
+        let def = unsafe {
+            LLVMConstStruct(values.as_mut_ptr(), values.len() as u32, LLVM_TRUE)
+        };
+        context.symbols.insert(format!("{}@default", self.name.0), def);
+        Ok(def)
     }
 }
 
