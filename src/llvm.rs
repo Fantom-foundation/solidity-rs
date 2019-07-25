@@ -775,13 +775,13 @@ impl<'a> CodeGenerator for Literal {
                     context.module.new_string_ptr("tempstring"),
                 )
             }),
-            Literal::HexLiteral(s) => Ok(unsafe {
+            Literal::HexLiteral(s) => Ok({
                 let value = usize::from_str(s).map_err(|_| {
                     CodeGenerationError::NumberParsingError(s.to_owned().to_owned())
                 })?;
                 let bits = find_int_size_in_bits(value);
-                let t = int(context, bits as u32);
-                LLVMConstInt(t, value as u64, LLVM_FALSE)
+                let t = uint(context, bits as u32);
+                build_uint(context, value as u64, bits as u32)
             }),
             Literal::BooleanLiteral(b) => {
                 Ok(unsafe { LLVMConstInt(int(context, 1), *b as _, LLVM_FALSE) })
@@ -791,8 +791,8 @@ impl<'a> CodeGenerator for Literal {
                     CodeGenerationError::NumberParsingError(s.to_owned().to_owned())
                 })?;
                 let bits = find_int_size_in_bits(value);
-                let t = int(context, bits as u32);
-                LLVMConstInt(t, value as u64, LLVM_TRUE)
+                let t = sint(context, bits as u32);
+                build_sint(context, value as i64, bits as u32)
             }),
         }
     }
@@ -1402,7 +1402,7 @@ impl<'a> CodeGenerator for LeftUnaryExpression {
                     let int_value = self.value.codegen(context)?;
                     let bits = unsafe { LLVMGetIntTypeWidth(exp_type) };
                     let mask_type = int(context, bits);
-                    let mask = unsafe { LLVMConstInt(mask_type, 2u64.pow(bits), LLVM_TRUE) };
+                    let mask = unsafe { LLVMConstInt(mask_type, 2u64.pow(bits-1), LLVM_TRUE) };
                     Ok(unsafe {
                         LLVMBuildOr(
                             context.builder.builder,
@@ -1436,7 +1436,7 @@ impl<'a> CodeGenerator for LeftUnaryExpression {
                     let int_value = self.value.codegen(context)?;
                     let bits = unsafe { LLVMGetIntTypeWidth(exp_type) };
                     let mask_type = int(context, bits);
-                    let mask = unsafe { LLVMConstInt(mask_type, !2u64.pow(bits), LLVM_TRUE) };
+                    let mask = unsafe { LLVMConstInt(mask_type, !2u64.pow(bits-1), LLVM_TRUE) };
                     Ok(unsafe {
                         LLVMBuildAnd(
                             context.builder.builder,
@@ -1460,11 +1460,11 @@ impl TypeGenerator for ElementaryTypeName {
     fn typegen(&self, context: &mut Context) -> Result<LLVMTypeRef, CodeGenerationError> {
         match self {
             ElementaryTypeName::String => Ok(unsafe { LLVMPointerType(int(context, 8), 0) }),
-            ElementaryTypeName::Address => Ok(int(context, 8 * 20)),
+            ElementaryTypeName::Address => Ok(uint(context, 8 * 20)),
             ElementaryTypeName::Bool => Ok(int(context, 1)),
-            ElementaryTypeName::Byte(b) => Ok(int(context, *b as u32 * 8)),
-            ElementaryTypeName::Uint(b) => Ok(int(context, *b as u32 * 8)),
-            ElementaryTypeName::Int(b) => Ok(int(context, *b as u32 * 8)),
+            ElementaryTypeName::Byte(b) => Ok(uint(context, *b as u32 * 8)),
+            ElementaryTypeName::Uint(b) => Ok(uint(context, *b as u32 * 8)),
+            ElementaryTypeName::Int(b) => Ok(sint(context, *b as u32 * 8)),
             ElementaryTypeName::Fixed(_, _) | ElementaryTypeName::Ufixed(_, _) => {
                 Err(CodeGenerationError::FixedPointNumbersNotStable)
             }
@@ -2058,7 +2058,7 @@ fn int(context: &Context, bits: u32) -> LLVMTypeRef {
 
 #[inline]
 fn uint(context: &Context, bits: u32) -> LLVMTypeRef {
-    unsafe { LLVMIntTypeInContext(context.context, bits + 1) }
+    unsafe { LLVMIntTypeInContext(context.context, bits+1) }
 }
 
 #[inline]
