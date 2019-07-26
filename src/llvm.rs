@@ -1496,8 +1496,8 @@ fn type_from_type_name(
                 user_defined_type_name.base.as_str().to_owned(),
             ))
             .map(|v| v.clone()),
-        TypeName::Address => Ok(int(context, 20 * 8)),
-        TypeName::AddressPayable => Ok(int(context, 20 * 8)),
+        TypeName::Address => Ok(uint(context, 20 * 8)),
+        TypeName::AddressPayable => Ok(uint(context, 20 * 8)),
         TypeName::Mapping(k, v) => {
             let key_type = k.typegen(context)?;
             let value_type = v.typegen(context)?;
@@ -1628,7 +1628,7 @@ impl TypeGenerator for EnumDefinition {
     fn typegen(&self, context: &mut Context) -> Result<LLVMTypeRef, CodeGenerationError> {
         let mut counter = 0;
         let s = find_int_size_in_bits(self.values.len());
-        let t = int(context, s as u32);
+        let t = uint(context, s as u32);
         for member in self.values.iter() {
             let member_symbol = format!("{}_{}", self.name.as_str(), member.as_str());
             let value = unsafe { LLVMConstInt(t, counter as u64, LLVM_FALSE) };
@@ -1677,17 +1677,17 @@ fn default_value(
                 )
             }),
             ElementaryTypeName::Address => {
-                Ok(unsafe { LLVMConstInt(int(context, 20), 0, LLVM_FALSE) })
+                Ok(unsafe { LLVMConstInt(uint(context, 20), 0, LLVM_FALSE) })
             }
             ElementaryTypeName::Bool => Ok(unsafe { LLVMConstInt(int(context, 1), 0, LLVM_FALSE) }),
             ElementaryTypeName::Byte(b) => {
-                Ok(unsafe { LLVMConstInt(int(context, *b as u32 * 8), 0, LLVM_FALSE) })
+                Ok(unsafe { LLVMConstInt(uint(context, *b as u32 * 8), 0, LLVM_FALSE) })
             }
             ElementaryTypeName::Uint(b) => {
-                Ok(unsafe { LLVMConstInt(int(context, *b as u32 * 8), 0, LLVM_FALSE) })
+                Ok(unsafe { LLVMConstInt(uint(context, *b as u32 * 8), 0, LLVM_FALSE) })
             }
             ElementaryTypeName::Int(b) => {
-                Ok(unsafe { LLVMConstInt(int(context, *b as u32 * 8), 0, LLVM_TRUE) })
+                Ok(unsafe { LLVMConstInt(sint(context, *b as u32 * 8), 0, LLVM_TRUE) })
             }
             ElementaryTypeName::Fixed(_, _) | ElementaryTypeName::Ufixed(_, _) => {
                 Err(CodeGenerationError::FixedPointNumbersNotStable)
@@ -1701,9 +1701,9 @@ fn default_value(
                 user_defined_type_name.base.as_str().to_owned(),
             ))
             .map(|v| v.clone()),
-        TypeName::Address => Ok(unsafe { LLVMConstInt(int(context, 20 * 8), 0, LLVM_FALSE) }),
+        TypeName::Address => Ok(unsafe { LLVMConstInt(uint(context, 20 * 8), 0, LLVM_FALSE) }),
         TypeName::AddressPayable => {
-            Ok(unsafe { LLVMConstInt(int(context, 20 * 8), 0, LLVM_FALSE) })
+            Ok(unsafe { LLVMConstInt(uint(context, 20 * 8), 0, LLVM_FALSE) })
         }
         TypeName::Mapping(k, v) => {
             let key_type = k.typegen(context)?;
@@ -1984,7 +1984,7 @@ impl<'a> CodeGenerator for Program {
 fn mapping(context: &mut Context, key: LLVMTypeRef, value: LLVMTypeRef) -> LLVMTypeRef {
     let mapping_name = format!("mapping<{:?}, {:?}>", key, value);
     let internal_array_type = unsafe { LLVMPointerType(value, 0) };
-    let size_type = int(context, 32);
+    let size_type = uint(context, 32);
     let get_function_type =
         unsafe { LLVMFunctionType(value, vec![key].as_mut_ptr(), 0, LLVM_FALSE) };
     let set_function_type =
@@ -2016,7 +2016,7 @@ fn mapping_value(context: &mut Context, key: LLVMTypeRef, value: LLVMTypeRef) ->
     let mapping_name = format!("mapping<{:?}, {:?}>", key, value);
     let internal_array_type = unsafe { LLVMPointerType(value, 0) };
     let internal_array = unsafe { LLVMConstArray(internal_array_type, Vec::new().as_mut_ptr(), 0) };
-    let size_type = int(context, 32);
+    let size_type = uint(context, 32);
     let size = unsafe { LLVMConstInt(size_type, 0, LLVM_FALSE) };
     let get_function_type =
         unsafe { LLVMFunctionType(value, vec![key].as_mut_ptr(), 1, LLVM_FALSE) };
