@@ -784,7 +784,7 @@ impl<'a> CodeGenerator for Literal {
                 build_uint(context, value as u64, bits as u32)
             }),
             Literal::BooleanLiteral(b) => {
-                Ok(unsafe { LLVMConstInt(int(context, 1), *b as _, LLVM_FALSE) })
+                Ok(build_uint(context, *b as _, 1 as u32))
             }
             Literal::NumberLiteral { value: s, unit: _ } => Ok(unsafe {
                 let value = usize::from_str(s).map_err(|_| {
@@ -863,7 +863,7 @@ impl<'a> CodeGenerator for Expression {
 impl<'a> TypeGenerator for Literal {
     fn typegen(&self, context: &mut Context) -> Result<LLVMTypeRef, CodeGenerationError> {
         match self {
-            Literal::BooleanLiteral(_) => Ok(int(context, 1)),
+            Literal::BooleanLiteral(_) => Ok(uint(context, 1)),
             Literal::HexLiteral(_) => {
                 let s = self.codegen(context)?;
                 Ok(unsafe { LLVMTypeOf(s) })
@@ -933,7 +933,7 @@ fn type_coalescing_to_boolean(context: &mut Context, value: LLVMValueRef) -> LLV
             LLVMBuildFCmp(
                 context.builder.builder,
                 LLVMRealPredicate::LLVMRealONE,
-                LLVMConstUIToFP(LLVMConstInt(int(context, 1), 0, LLVM_FALSE), value_type),
+                LLVMConstUIToFP(build_uint(context, 1, 1), value_type),
                 value,
                 context.module.new_string_ptr("coalesce to boolean"),
             )
@@ -1006,14 +1006,14 @@ impl<'a> TypeGenerator for BinaryExpression {
                 let right_type = self.right.typegen(context)?;
                 type_cohesion(left_type, right_type)
             }
-            BinaryOperator::BangEquals => Ok(int(context, 1)),
-            BinaryOperator::BiggerOrEqualsThan => Ok(int(context, 1)),
-            BinaryOperator::BiggerThan => Ok(int(context, 1)),
-            BinaryOperator::DoubleAmpersand => Ok(int(context, 1)),
-            BinaryOperator::DoubleBar => Ok(int(context, 1)),
-            BinaryOperator::DoubleEquals => Ok(int(context, 1)),
-            BinaryOperator::LesserOrEqualsThan => Ok(int(context, 1)),
-            BinaryOperator::LesserThan => Ok(int(context, 1)),
+            BinaryOperator::BangEquals => Ok(uint(context, 1)),
+            BinaryOperator::BiggerOrEqualsThan => Ok(uint(context, 1)),
+            BinaryOperator::BiggerThan => Ok(uint(context, 1)),
+            BinaryOperator::DoubleAmpersand => Ok(uint(context, 1)),
+            BinaryOperator::DoubleBar => Ok(uint(context, 1)),
+            BinaryOperator::DoubleEquals => Ok(uint(context, 1)),
+            BinaryOperator::LesserOrEqualsThan => Ok(uint(context, 1)),
+            BinaryOperator::LesserThan => Ok(uint(context, 1)),
             BinaryOperator::Equals => self.right.typegen(context),
         }
     }
@@ -1022,7 +1022,7 @@ impl<'a> TypeGenerator for BinaryExpression {
 impl<'a> TypeGenerator for LeftUnaryExpression {
     fn typegen(&self, context: &mut Context) -> Result<LLVMTypeRef, CodeGenerationError> {
         match self.op {
-            LeftUnaryOperator::Bang => Ok(int(context, 1)),
+            LeftUnaryOperator::Bang => Ok(uint(context, 1)),
             _ => self.value.typegen(context),
         }
     }
@@ -1080,7 +1080,7 @@ impl<'a> CodeGenerator for Statement {
         match self {
             Statement::Block(b) => b
                 .iter()
-                .fold(Ok(unsafe { LLVMConstNull(int(context, 1)) }), |_, s| {
+                .fold(Ok(unsafe { build_uint(context, 0, 1) }), |_, s| {
                     s.codegen(context)
                 }),
             Statement::Break => {
@@ -1109,7 +1109,7 @@ impl<'a> CodeGenerator for Statement {
                     }
                     _ => None,
                 }
-                .unwrap_or(int(context, 0));
+                .unwrap_or(uint(context, 0));
                 let start_value = match start {
                     Some(SimpleStatement::ExpressionStatement(e)) => Some(e.codegen(context)?),
                     Some(SimpleStatement::VariableDefinition(_, Some(e))) => {
@@ -1165,11 +1165,11 @@ impl<'a> CodeGenerator for Statement {
                 body.codegen(context)?;
                 let step = match end {
                     Some(e) => e.codegen(context)?,
-                    None => unsafe { LLVMConstNull(int(context, 0)) },
+                    None => unsafe { build_uint(context, 0, 1) },
                 };
                 let cond = match condition {
                     Some(c) => c.codegen(context)?,
-                    None => unsafe { LLVMConstNull(int(context, 0)) },
+                    None => unsafe { build_uint(context, 0, 1) },
                 };
                 let cond_boolean = type_coalescing_to_boolean(context, cond);
                 let loop_end = unsafe { LLVMGetInsertBlock(context.builder.builder) };
@@ -1210,7 +1210,7 @@ impl<'a> CodeGenerator for Statement {
                 };
                 // TODO: Update this when we leave the loop
                 context.loop_stack.push((bb.clone(), loop_end.clone()));
-                Ok(unsafe { LLVMConstNull(int(context, 0)) })
+                Ok(unsafe { build_uint(context, 0, 1) })
             }
             Statement::IfStatement(is) => {
                 let condition = is.condition.codegen(context)?;
@@ -1218,7 +1218,7 @@ impl<'a> CodeGenerator for Statement {
                 let else_branch = if let Some(e) = &is.false_branch {
                     unsafe { LLVMValueAsBasicBlock(e.codegen(context)?) }
                 } else {
-                    unsafe { LLVMValueAsBasicBlock(LLVMConstNull(int(context, 1))) }
+                    unsafe { LLVMValueAsBasicBlock(build_uint(context, 0, 1)) }
                 };
                 Ok(unsafe {
                     LLVMBuildCondBr(context.builder.builder, condition, if_branch, else_branch)
@@ -1235,7 +1235,7 @@ impl<'a> CodeGenerator for Statement {
                 Ok(e)
             }
             Statement::Return(None) => {
-                let v = unsafe { LLVMConstNull(int(context, 0)) };
+                let v = unsafe { build_uint(context, 0, 1) };
                 unsafe { LLVMBuildRet(context.builder.builder, v) };
                 Ok(v)
             }
@@ -1371,7 +1371,7 @@ impl<'a> CodeGenerator for LeftUnaryExpression {
                         LLVMBuildSub(
                             context.builder.builder,
                             int_value,
-                            LLVMConstInt(int(context, 1), 1, LLVM_FALSE),
+                            build_uint(context, 1, 1),
                             context.module.new_string_ptr("tmpsub"),
                         )
                     })
@@ -1388,7 +1388,7 @@ impl<'a> CodeGenerator for LeftUnaryExpression {
                         LLVMBuildAdd(
                             context.builder.builder,
                             int_value,
-                            LLVMConstInt(int(context, 1), 1, LLVM_FALSE),
+                            build_uint(context, 1, 1),
                             context.module.new_string_ptr("tmpadd"),
                         )
                     })
@@ -1401,7 +1401,7 @@ impl<'a> CodeGenerator for LeftUnaryExpression {
                 if unsafe { LLVMGetTypeKind(exp_type) } == LLVMTypeKind::LLVMIntegerTypeKind {
                     let int_value = self.value.codegen(context)?;
                     let bits = unsafe { LLVMGetIntTypeWidth(exp_type) };
-                    let mask_type = int(context, bits);
+                    let mask_type = uint(context, bits);
                     let mask = unsafe { LLVMConstInt(mask_type, 2u64.pow(bits-1), LLVM_TRUE) };
                     Ok(unsafe {
                         LLVMBuildOr(
@@ -1435,7 +1435,7 @@ impl<'a> CodeGenerator for LeftUnaryExpression {
                 if unsafe { LLVMGetTypeKind(exp_type) } == LLVMTypeKind::LLVMIntegerTypeKind {
                     let int_value = self.value.codegen(context)?;
                     let bits = unsafe { LLVMGetIntTypeWidth(exp_type) };
-                    let mask_type = int(context, bits);
+                    let mask_type = uint(context, bits);
                     let mask = unsafe { LLVMConstInt(mask_type, !2u64.pow(bits-1), LLVM_TRUE) };
                     Ok(unsafe {
                         LLVMBuildAnd(
@@ -1459,9 +1459,9 @@ impl<'a> CodeGenerator for LeftUnaryExpression {
 impl TypeGenerator for ElementaryTypeName {
     fn typegen(&self, context: &mut Context) -> Result<LLVMTypeRef, CodeGenerationError> {
         match self {
-            ElementaryTypeName::String => Ok(unsafe { LLVMPointerType(int(context, 8), 0) }),
+            ElementaryTypeName::String => Ok(unsafe { LLVMPointerType(uint(context, 8), 0) }),
             ElementaryTypeName::Address => Ok(uint(context, 8 * 20)),
-            ElementaryTypeName::Bool => Ok(int(context, 1)),
+            ElementaryTypeName::Bool => Ok(uint(context, 1)),
             ElementaryTypeName::Byte(b) => Ok(uint(context, *b as u32 * 8)),
             ElementaryTypeName::Uint(b) => Ok(uint(context, *b as u32 * 8)),
             ElementaryTypeName::Int(b) => Ok(sint(context, *b as u32 * 8)),
@@ -1612,7 +1612,7 @@ impl TypeGenerator for EventDefinition {
             .iter()
             .map(|p| type_from_type_name(&p.type_name, context).unwrap())
             .collect::<Vec<LLVMTypeRef>>();
-        event_types.push(int(context, 1));
+        event_types.push(uint(context, 1));
         Ok(unsafe {
             LLVMStructTypeInContext(
                 context.context,
@@ -1679,7 +1679,7 @@ fn default_value(
             ElementaryTypeName::Address => {
                 Ok(unsafe { LLVMConstInt(uint(context, 20), 0, LLVM_FALSE) })
             }
-            ElementaryTypeName::Bool => Ok(unsafe { LLVMConstInt(int(context, 1), 0, LLVM_FALSE) }),
+            ElementaryTypeName::Bool => Ok(unsafe { build_uint(context, 0, 1) }),
             ElementaryTypeName::Byte(b) => {
                 Ok(unsafe { LLVMConstInt(uint(context, *b as u32 * 8), 0, LLVM_FALSE) })
             }
@@ -1766,7 +1766,7 @@ impl CodeGenerator for ModifierDefinition {
                 None => {}
             };
         }
-        let return_type = int(context, 1);
+        let return_type = uint(context, 1);
         let return_value = self
             .block
             .iter()
@@ -1842,7 +1842,7 @@ impl CodeGenerator for FunctionDefinition {
                 s.codegen(context).unwrap();
             }
         });
-        unsafe { LLVMBuildRet(context.builder.builder, LLVMConstNull(int(context, 0))) };
+        unsafe { LLVMBuildRet(context.builder.builder, build_uint(context, 0, 1)) };
         let result = unsafe {
             LLVMVerifyFunction(function, LLVMVerifierFailureAction::LLVMPrintMessageAction)
         };
@@ -2052,11 +2052,6 @@ fn mapping_value(context: &mut Context, key: LLVMTypeRef, value: LLVMTypeRef) ->
 }
 
 #[inline]
-fn int(context: &Context, bits: u32) -> LLVMTypeRef {
-    unsafe { LLVMIntTypeInContext(context.context, bits) }
-}
-
-#[inline]
 fn uint(context: &Context, bits: u32) -> LLVMTypeRef {
     unsafe { LLVMIntTypeInContext(context.context, bits+1) }
 }
@@ -2108,7 +2103,7 @@ fn find_int_size_in_bits(number: usize) -> usize {
 
 #[inline]
 fn hash_function(context: &mut Context) -> LLVMValueRef {
-    let u32_type = int(context, 8 * 32);
+    let u32_type = uint(context, 8 * 32);
     let function_type =
         unsafe { LLVMFunctionType(u32_type, vec![u32_type].as_mut_ptr(), 2, LLVM_FALSE) };
     let function = unsafe {
