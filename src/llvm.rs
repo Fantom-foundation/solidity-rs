@@ -240,18 +240,57 @@ fn gt(
 ) -> LLVMValueRef {
     let type_kind = unsafe { LLVMGetTypeKind(common_type) };
     match type_kind {
-        /*
-        TODO: Think how to store signed type information
         LLVMTypeKind::LLVMIntegerTypeKind => unsafe {
-            LLVMBuildICmp(
-                context.builder.builder,
-                LLVMIntPredicate::LLVMIn,
-                converted_left_value,
-                converted_right_value,
-                context.module.new_string_ptr("greater than"),
-            )
+            let bits = unsafe { LLVMGetIntTypeWidth(common_type) };
+            let left_condition = unsafe {
+                LLVMBuildAnd(
+                    context.builder.builder,
+                    build_uint(context, 2_u64.pow(bits-1), bits-1),
+                    converted_left_value,
+                    context.module.new_string_ptr("check left signed and"),
+                )
+            };
+            let right_condition = unsafe {
+                LLVMBuildAnd(
+                    context.builder.builder,
+                    build_uint(context, 2_u64.pow(bits-1), bits-1),
+                    converted_right_value,
+                    context.module.new_string_ptr("check right signed and"),
+                )
+            };
+            let condition = unsafe {
+                LLVMBuildOr(
+                    context.builder.builder,
+                    left_condition,
+                    right_condition,
+                    context.module.new_string_ptr("condition signed and"),
+                )
+            };
+            unsafe {
+                LLVMBuildCondBr(
+                    context.builder.builder,
+                    condition,
+                    LLVMValueAsBasicBlock(
+                        LLVMBuildICmp(
+                            context.builder.builder,
+                            LLVMIntPredicate::LLVMIntSGT,
+                            converted_left_value,
+                            converted_right_value,
+                            context.module.new_string_ptr("signed and"),
+                        ),
+                    ),
+                    LLVMValueAsBasicBlock(
+                        LLVMBuildICmp(
+                            context.builder.builder,
+                            LLVMIntPredicate::LLVMIntUGT,
+                            converted_left_value,
+                            converted_right_value,
+                            context.module.new_string_ptr("unsigned and"),
+                        )
+                    ),
+                )
+            }
         },
-        */
         LLVMTypeKind::LLVMFloatTypeKind => unsafe {
             LLVMBuildFCmp(
                 context.builder.builder,
