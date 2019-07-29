@@ -6,15 +6,15 @@ use llvm_sys::core::{
     LLVMArrayType, LLVMBasicBlockAsValue, LLVMBuildAShr, LLVMBuildAdd, LLVMBuildAnd, LLVMBuildBr,
     LLVMBuildCall, LLVMBuildCondBr, LLVMBuildFAdd, LLVMBuildFCmp, LLVMBuildFDiv, LLVMBuildFMul,
     LLVMBuildFRem, LLVMBuildFSub, LLVMBuildGlobalStringPtr, LLVMBuildICmp, LLVMBuildInsertElement,
-    LLVMBuildMul, LLVMBuildNeg, LLVMBuildOr, LLVMBuildPhi, LLVMBuildRet, LLVMBuildShl,
-    LLVMBuildSub, LLVMBuildXor, LLVMConstArray, LLVMConstInt, LLVMConstIntGetZExtValue,
-    LLVMConstNull, LLVMConstStruct, LLVMConstStructInContext, LLVMConstUIToFP, LLVMContextCreate,
-    LLVMContextDispose, LLVMCreateBuilderInContext, LLVMDisposeBuilder, LLVMDisposeModule,
-    LLVMFunctionType, LLVMGetBasicBlockParent, LLVMGetInsertBlock, LLVMGetIntTypeWidth,
-    LLVMGetParam, LLVMGetReturnType, LLVMGetTypeKind, LLVMInsertBasicBlockInContext,
-    LLVMIntTypeInContext, LLVMModuleCreateWithNameInContext, LLVMPointerType,
-    LLVMPositionBuilderAtEnd, LLVMStructCreateNamed, LLVMStructSetBody, LLVMStructTypeInContext,
-    LLVMTypeOf, LLVMValueAsBasicBlock, LLVMVoidType,
+    LLVMBuildMul, LLVMBuildNeg, LLVMBuildOr, LLVMBuildPhi, LLVMBuildRet, LLVMBuildSDiv,
+    LLVMBuildSRem, LLVMBuildShl, LLVMBuildSub, LLVMBuildXor, LLVMConstArray, LLVMConstInt,
+    LLVMConstIntGetZExtValue, LLVMConstNull, LLVMConstStruct, LLVMConstStructInContext,
+    LLVMConstUIToFP, LLVMContextCreate, LLVMContextDispose, LLVMCreateBuilderInContext,
+    LLVMDisposeBuilder, LLVMDisposeModule, LLVMFunctionType, LLVMGetBasicBlockParent,
+    LLVMGetInsertBlock, LLVMGetIntTypeWidth, LLVMGetParam, LLVMGetReturnType, LLVMGetTypeKind,
+    LLVMInsertBasicBlockInContext, LLVMIntTypeInContext, LLVMModuleCreateWithNameInContext,
+    LLVMPointerType, LLVMPositionBuilderAtEnd, LLVMStructCreateNamed, LLVMStructSetBody,
+    LLVMStructTypeInContext, LLVMTypeOf, LLVMValueAsBasicBlock, LLVMVoidType,
 };
 use llvm_sys::prelude::*;
 use llvm_sys::{LLVMBuilder, LLVMIntPredicate, LLVMModule, LLVMRealPredicate, LLVMTypeKind};
@@ -241,55 +241,13 @@ fn gt(
     let type_kind = unsafe { LLVMGetTypeKind(common_type) };
     match type_kind {
         LLVMTypeKind::LLVMIntegerTypeKind => unsafe {
-            let bits = unsafe { LLVMGetIntTypeWidth(common_type) };
-            let left_condition = unsafe {
-                LLVMBuildAnd(
-                    context.builder.builder,
-                    build_uint(context, 2_u64.pow(bits-1), bits-1),
-                    converted_left_value,
-                    context.module.new_string_ptr("check left signed and"),
-                )
-            };
-            let right_condition = unsafe {
-                LLVMBuildAnd(
-                    context.builder.builder,
-                    build_uint(context, 2_u64.pow(bits-1), bits-1),
-                    converted_right_value,
-                    context.module.new_string_ptr("check right signed and"),
-                )
-            };
-            let condition = unsafe {
-                LLVMBuildOr(
-                    context.builder.builder,
-                    left_condition,
-                    right_condition,
-                    context.module.new_string_ptr("condition signed and"),
-                )
-            };
-            unsafe {
-                LLVMBuildCondBr(
-                    context.builder.builder,
-                    condition,
-                    LLVMValueAsBasicBlock(
-                        LLVMBuildICmp(
-                            context.builder.builder,
-                            LLVMIntPredicate::LLVMIntSGT,
-                            converted_left_value,
-                            converted_right_value,
-                            context.module.new_string_ptr("signed and"),
-                        ),
-                    ),
-                    LLVMValueAsBasicBlock(
-                        LLVMBuildICmp(
-                            context.builder.builder,
-                            LLVMIntPredicate::LLVMIntUGT,
-                            converted_left_value,
-                            converted_right_value,
-                            context.module.new_string_ptr("unsigned and"),
-                        )
-                    ),
-                )
-            }
+            LLVMBuildICmp(
+                context.builder.builder,
+                LLVMIntPredicate::LLVMIntSGT,
+                converted_left_value,
+                converted_right_value,
+                context.module.new_string_ptr("signed and"),
+            )
         },
         LLVMTypeKind::LLVMFloatTypeKind => unsafe {
             LLVMBuildFCmp(
@@ -312,18 +270,15 @@ fn lt(
 ) -> LLVMValueRef {
     let type_kind = unsafe { LLVMGetTypeKind(common_type) };
     match type_kind {
-        /*
-        TODO: Think how to store signed type information
         LLVMTypeKind::LLVMIntegerTypeKind => unsafe {
             LLVMBuildICmp(
                 context.builder.builder,
-                LLVMIntPredicate::LLVMIn,
+                LLVMIntPredicate::LLVMIntSLT,
                 converted_left_value,
                 converted_right_value,
-                context.module.new_string_ptr("greater than"),
+                context.module.new_string_ptr("signed lesser than"),
             )
         },
-        */
         LLVMTypeKind::LLVMFloatTypeKind => unsafe {
             LLVMBuildFCmp(
                 context.builder.builder,
@@ -345,18 +300,17 @@ fn ge(
 ) -> LLVMValueRef {
     let type_kind = unsafe { LLVMGetTypeKind(common_type) };
     match type_kind {
-        /*
-        TODO: Think how to store signed type information
         LLVMTypeKind::LLVMIntegerTypeKind => unsafe {
             LLVMBuildICmp(
                 context.builder.builder,
-                LLVMIntPredicate::LLVMIn,
+                LLVMIntPredicate::LLVMIntSGE,
                 converted_left_value,
                 converted_right_value,
-                context.module.new_string_ptr("greater than"),
+                context
+                    .module
+                    .new_string_ptr("signed greater than or equals"),
             )
         },
-        */
         LLVMTypeKind::LLVMFloatTypeKind => unsafe {
             LLVMBuildFCmp(
                 context.builder.builder,
@@ -378,18 +332,17 @@ fn le(
 ) -> LLVMValueRef {
     let type_kind = unsafe { LLVMGetTypeKind(common_type) };
     match type_kind {
-        /*
-        TODO: Think how to store signed type information
         LLVMTypeKind::LLVMIntegerTypeKind => unsafe {
             LLVMBuildICmp(
                 context.builder.builder,
-                LLVMIntPredicate::LLVMIn,
+                LLVMIntPredicate::LLVMIntSLE,
                 converted_left_value,
                 converted_right_value,
-                context.module.new_string_ptr("greater than"),
+                context
+                    .module
+                    .new_string_ptr("signed lesser than or equals"),
             )
         },
-        */
         LLVMTypeKind::LLVMFloatTypeKind => unsafe {
             LLVMBuildFCmp(
                 context.builder.builder,
@@ -518,12 +471,14 @@ fn div(
     right: LLVMValueRef,
 ) -> LLVMValueRef {
     match kind {
-        /*
-        TODO: Handle signed integer.
         LLVMTypeKind::LLVMIntegerTypeKind => unsafe {
-            LLVMBuildSub(context.builder.builder, left, right, context.module.new_string_ptr("sub integer"))
+            LLVMBuildSDiv(
+                context.builder.builder,
+                left,
+                right,
+                context.module.new_string_ptr("Integer divide"),
+            )
         },
-        */
         LLVMTypeKind::LLVMFloatTypeKind => unsafe {
             LLVMBuildFDiv(
                 context.builder.builder,
@@ -565,12 +520,14 @@ fn rem(
     right: LLVMValueRef,
 ) -> LLVMValueRef {
     match kind {
-        /*
-        TODO: Handle signed integer.
         LLVMTypeKind::LLVMIntegerTypeKind => unsafe {
-            LLVMBuildSub(context.builder.builder, left, right, context.module.new_string_ptr("sub integer"))
+            LLVMBuildSRem(
+                context.builder.builder,
+                left,
+                right,
+                context.module.new_string_ptr("rem signed integer"),
+            )
         },
-        */
         LLVMTypeKind::LLVMFloatTypeKind => unsafe {
             LLVMBuildFRem(
                 context.builder.builder,
@@ -822,9 +779,7 @@ impl<'a> CodeGenerator for Literal {
                 let t = uint(context, bits as u32);
                 build_uint(context, value as u64, bits as u32)
             }),
-            Literal::BooleanLiteral(b) => {
-                Ok(build_uint(context, *b as _, 1 as u32))
-            }
+            Literal::BooleanLiteral(b) => Ok(build_uint(context, *b as _, 1 as u32)),
             Literal::NumberLiteral { value: s, unit: _ } => Ok(unsafe {
                 let value = usize::from_str(s).map_err(|_| {
                     CodeGenerationError::NumberParsingError(s.to_owned().to_owned())
@@ -1441,7 +1396,7 @@ impl<'a> CodeGenerator for LeftUnaryExpression {
                     let int_value = self.value.codegen(context)?;
                     let bits = unsafe { LLVMGetIntTypeWidth(exp_type) };
                     let mask_type = uint(context, bits);
-                    let mask = unsafe { LLVMConstInt(mask_type, 2u64.pow(bits-1), LLVM_TRUE) };
+                    let mask = unsafe { LLVMConstInt(mask_type, 2u64.pow(bits - 1), LLVM_TRUE) };
                     Ok(unsafe {
                         LLVMBuildOr(
                             context.builder.builder,
@@ -1475,7 +1430,7 @@ impl<'a> CodeGenerator for LeftUnaryExpression {
                     let int_value = self.value.codegen(context)?;
                     let bits = unsafe { LLVMGetIntTypeWidth(exp_type) };
                     let mask_type = uint(context, bits);
-                    let mask = unsafe { LLVMConstInt(mask_type, !2u64.pow(bits-1), LLVM_TRUE) };
+                    let mask = unsafe { LLVMConstInt(mask_type, !2u64.pow(bits - 1), LLVM_TRUE) };
                     Ok(unsafe {
                         LLVMBuildAnd(
                             context.builder.builder,
@@ -2092,7 +2047,7 @@ fn mapping_value(context: &mut Context, key: LLVMTypeRef, value: LLVMTypeRef) ->
 
 #[inline]
 fn uint(context: &Context, bits: u32) -> LLVMTypeRef {
-    unsafe { LLVMIntTypeInContext(context.context, bits+1) }
+    unsafe { LLVMIntTypeInContext(context.context, bits + 1) }
 }
 
 #[inline]
