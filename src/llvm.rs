@@ -20,6 +20,7 @@ use llvm_sys::prelude::*;
 use llvm_sys::{LLVMBuilder, LLVMIntPredicate, LLVMModule, LLVMRealPredicate, LLVMTypeKind};
 use std::collections::HashMap;
 use std::ffi::CString;
+use std::iter::FromIterator;
 use std::str::FromStr;
 
 const LLVM_FALSE: LLVMBool = 0 as LLVMBool;
@@ -117,6 +118,8 @@ pub enum CodeGenerationError {
     ModifierDoesntExist,
     #[fail(display = "No loop active")]
     NoLoopActive,
+    #[fail(display = "Function was not in parameters")]
+    NoParameterInContext,
 }
 
 pub struct Context {
@@ -127,6 +130,7 @@ pub struct Context {
     type_symbols: HashMap<String, LLVMTypeRef>,
     function_modifiers: HashMap<LLVMValueRef, Vec<FunctionDefinitionModifier>>,
     function_modifiers_stack: Vec<LLVMValueRef>,
+    function_parameters: HashMap<LLVMValueRef, Vec<Parameter>>,
     loop_stack: Vec<(LLVMBasicBlockRef, LLVMBasicBlockRef)>,
 }
 
@@ -141,6 +145,7 @@ impl Context {
             type_symbols: HashMap::new(),
             function_modifiers: HashMap::new(),
             function_modifiers_stack: Vec::new(),
+            function_parameters: HashMap::new(),
             loop_stack: Vec::new(),
         })
     }
@@ -1240,15 +1245,26 @@ impl<'a> CodeGenerator for Statement {
 
 fn function_call_arguments_to_values(
     context: &mut Context,
+    function: LLVMValueRef,
     arguments: &FunctionCallArguments,
 ) -> Result<Vec<LLVMValueRef>, CodeGenerationError> {
     match arguments {
         FunctionCallArguments::ExpressionList(es) => {
             es.iter().map(|e| e.codegen(context)).collect()
         }
-        // TODO: Name values can be out of order
         FunctionCallArguments::NameValueList(ns) => {
-            ns.iter().map(|n| n.value.codegen(context)).collect()
+            let ns_map: HashMap<String, LLVMValueRef> = HashMap::from_iter(
+                ns.iter().map(|n| (n.parameter.0.to_string(), n.value.codegen(context).unwrap()))
+            );
+            if let Some(parameters) = context.function_parameters.get(&function) {
+                let mut sorted_array = vec![];
+                for p in parameters {
+                    sorted_array.push(ns_map[&p.identifier.clone().unwrap().as_str().to_string()]);
+                }
+                Ok(sorted_array)
+            } else {
+                Err(CodeGenerationError::NoParameterInContext)
+            }
         }
     }
 }
@@ -1297,7 +1313,7 @@ impl<'a> CodeGenerator for FunctionCall {
                     }
                 })
                 .collect::<Vec<ModifierInvocation>>();
-            let mut arguments = function_call_arguments_to_values(context, &self.arguments)?;
+            let mut arguments = function_call_arguments_to_values(context, function, &self.arguments)?;
             let mut function_calls = Vec::new();
             function_calls.push(unsafe {
                 LLVMBuildCall(
@@ -1843,7 +1859,8 @@ impl CodeGenerator for FunctionDefinition {
         if result == 0 {
             context
                 .function_modifiers
-                .insert(function, self.modifiers.clone());;
+                .insert(function, self.modifiers.clone());
+            context.function_parameters.insert(function, self.parameters.clone());
             if let Some(id) = &self.name {
                 context.symbols.insert(id.0.to_owned(), function);
                 context.type_symbols.insert(id.0.to_owned(), prototype);

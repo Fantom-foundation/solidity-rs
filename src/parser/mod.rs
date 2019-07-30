@@ -1244,7 +1244,7 @@ pub enum FunctionCallArguments {
 
 #[derive(Clone)]
 pub struct NameValue {
-    parameter: Identifier,
+    pub parameter: Identifier,
     pub value: Box<Expression>,
 }
 
