@@ -1622,13 +1622,20 @@ impl TypeGenerator for EventDefinition {
             .iter()
             .map(|p| type_from_type_name(&p.type_name, context).unwrap())
             .collect::<Vec<LLVMTypeRef>>();
-        event_types.push(uint(context, 1));
-        Ok(unsafe {
+        let return_type = unsafe {
             LLVMStructTypeInContext(
                 context.context,
                 event_types.as_mut_ptr(),
                 event_types.len() as u32,
                 LLVM_TRUE,
+            )
+        };
+        Ok(unsafe {
+            LLVMFunctionType(
+                return_type,
+                event_types.as_mut_ptr(),
+                event_types.len() as u32,
+                LLVM_FALSE,
             )
         })
     }
