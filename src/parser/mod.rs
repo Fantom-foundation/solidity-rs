@@ -1103,7 +1103,7 @@ pub struct EnumDefinition {
 #[derive(Clone)]
 pub struct EventParameter {
     indexed: bool,
-    name: Option<Identifier>,
+    pub name: Option<Identifier>,
     pub type_name: TypeName,
 }
 

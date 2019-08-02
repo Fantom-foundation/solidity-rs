@@ -1,21 +1,7 @@
 use crate::parser::*;
 use failure::Error;
 use llvm_sys::analysis::{LLVMVerifierFailureAction, LLVMVerifyFunction};
-use llvm_sys::core::{
-    LLVMAddFunction, LLVMAddIncoming, LLVMAppendBasicBlock, LLVMAppendBasicBlockInContext,
-    LLVMArrayType, LLVMBasicBlockAsValue, LLVMBuildAShr, LLVMBuildAdd, LLVMBuildAnd, LLVMBuildBr,
-    LLVMBuildCall, LLVMBuildCondBr, LLVMBuildFAdd, LLVMBuildFCmp, LLVMBuildFDiv, LLVMBuildFMul,
-    LLVMBuildFRem, LLVMBuildFSub, LLVMBuildGlobalStringPtr, LLVMBuildICmp, LLVMBuildInsertElement,
-    LLVMBuildMul, LLVMBuildNeg, LLVMBuildOr, LLVMBuildPhi, LLVMBuildRet, LLVMBuildSDiv,
-    LLVMBuildSRem, LLVMBuildShl, LLVMBuildSub, LLVMBuildXor, LLVMConstArray, LLVMConstInt,
-    LLVMConstIntGetZExtValue, LLVMConstNull, LLVMConstStruct, LLVMConstStructInContext,
-    LLVMConstUIToFP, LLVMContextCreate, LLVMContextDispose, LLVMCreateBuilderInContext,
-    LLVMDisposeBuilder, LLVMDisposeModule, LLVMFunctionType, LLVMGetBasicBlockParent,
-    LLVMGetInsertBlock, LLVMGetIntTypeWidth, LLVMGetParam, LLVMGetReturnType, LLVMGetTypeKind,
-    LLVMInsertBasicBlockInContext, LLVMIntTypeInContext, LLVMModuleCreateWithNameInContext,
-    LLVMPointerType, LLVMPositionBuilderAtEnd, LLVMStructCreateNamed, LLVMStructSetBody,
-    LLVMStructTypeInContext, LLVMTypeOf, LLVMValueAsBasicBlock, LLVMVoidType,
-};
+use llvm_sys::core::{LLVMAddFunction, LLVMAddIncoming, LLVMAppendBasicBlock, LLVMAppendBasicBlockInContext, LLVMArrayType, LLVMBasicBlockAsValue, LLVMBuildAShr, LLVMBuildAdd, LLVMBuildAnd, LLVMBuildBr, LLVMBuildCall, LLVMBuildCondBr, LLVMBuildFAdd, LLVMBuildFCmp, LLVMBuildFDiv, LLVMBuildFMul, LLVMBuildFRem, LLVMBuildFSub, LLVMBuildGlobalStringPtr, LLVMBuildICmp, LLVMBuildInsertElement, LLVMBuildMul, LLVMBuildNeg, LLVMBuildOr, LLVMBuildPhi, LLVMBuildRet, LLVMBuildSDiv, LLVMBuildSRem, LLVMBuildShl, LLVMBuildSub, LLVMBuildXor, LLVMConstArray, LLVMConstInt, LLVMConstIntGetZExtValue, LLVMConstNull, LLVMConstStruct, LLVMConstStructInContext, LLVMConstUIToFP, LLVMContextCreate, LLVMContextDispose, LLVMCreateBuilderInContext, LLVMDisposeBuilder, LLVMDisposeModule, LLVMFunctionType, LLVMGetBasicBlockParent, LLVMGetInsertBlock, LLVMGetIntTypeWidth, LLVMGetParam, LLVMGetReturnType, LLVMGetTypeKind, LLVMInsertBasicBlockInContext, LLVMIntTypeInContext, LLVMModuleCreateWithNameInContext, LLVMPointerType, LLVMPositionBuilderAtEnd, LLVMStructCreateNamed, LLVMStructSetBody, LLVMStructTypeInContext, LLVMTypeOf, LLVMValueAsBasicBlock, LLVMVoidType, LLVMGetParams, LLVMConstNamedStruct, LLVMStructType};
 use llvm_sys::prelude::*;
 use llvm_sys::{LLVMBuilder, LLVMIntPredicate, LLVMModule, LLVMRealPredicate, LLVMTypeKind};
 use std::collections::HashMap;
@@ -1888,8 +1874,41 @@ impl<'a> CodeGenerator for EnumDefinition {
 
 impl<'a> CodeGenerator for EventDefinition {
     fn codegen(&self, context: &mut Context) -> Result<LLVMValueRef, CodeGenerationError> {
-        let t = self.typegen(context)?;
-        Ok(unsafe { LLVMConstNull(t) })
+        let mut types = self
+            .parameters
+            .iter()
+            .map(|vd| vd.type_name.typegen(context).unwrap())
+            .collect::<Vec<LLVMTypeRef>>();
+        let event = unsafe {
+            LLVMStructType(types.as_mut_ptr(), types.len() as _, LLVM_TRUE)
+        };
+        let prototype = self.typegen(context)?;
+        let function = unsafe {
+            LLVMAddFunction(
+                context.module.module,
+                context.module.new_string_ptr("event creation"),
+                prototype,
+            )
+        };
+        let _bb = unsafe {
+            LLVMAppendBasicBlock(function, context.module.new_string_ptr("event_function_block"))
+        };
+        let mut params  = vec![];
+        unsafe { LLVMGetParams(function, params.as_mut_ptr()) };
+        let return_value = unsafe {
+            LLVMConstNamedStruct(event, params.as_mut_ptr(), params.len() as _)
+        };
+        unsafe { LLVMBuildRet(context.builder.builder, build_uint(context, 0, 1)) };
+        let result = unsafe {
+            LLVMVerifyFunction(function, LLVMVerifierFailureAction::LLVMPrintMessageAction)
+        };
+        if result == 0 {
+            context.symbols.insert(self.name.0.to_owned(), function);
+            context.type_symbols.insert(self.name.0.to_owned(), prototype);
+            Ok(function)
+        } else {
+            Err(CodeGenerationError::InvalidFunction)
+        }
     }
 }
 
