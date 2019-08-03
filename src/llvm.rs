@@ -1084,7 +1084,6 @@ impl<'a> CodeGenerator for Statement {
                     Err(CodeGenerationError::NoLoopActive)
                 }
             }
-            // TODO: FunctionCall is Event agnostic and this will likely fail.
             Statement::Emit(f) => f.codegen(context),
             Statement::ForStatement(start, condition, end, body) => {
                 let start_value_type = match start {
@@ -1322,16 +1321,38 @@ impl<'a> CodeGenerator for FunctionCall {
     }
 }
 
+fn update_symbol_for_expression(context: &mut Context, e: &Box<Expression>, v: LLVMValueRef) {
+    // TODO: Fill this function
+}
+
 impl<'a> CodeGenerator for RightUnaryExpression {
     fn codegen(&self, context: &mut Context) -> Result<LLVMValueRef, CodeGenerationError> {
         match self.op {
             RightUnaryOperator::DoubleDash => {
-                // TODO: Update symbols
-                self.value.codegen(context)
+                let v = self.value.codegen(context)?;
+                let new_v = unsafe {
+                    LLVMBuildSub(
+                        context.builder.builder,
+                        build_sint(context, 1, 1),
+                        v,
+                        context.module.new_string_ptr("double dash right"),
+                    )
+                };
+                update_symbol_for_expression(context, &self.value, v);
+                Ok(v)
             }
             RightUnaryOperator::DoublePlus => {
-                // TODO: Update symbols
-                self.value.codegen(context)
+                let v = self.value.codegen(context)?;
+                let new_v = unsafe {
+                    LLVMBuildAdd(
+                        context.builder.builder,
+                        build_sint(context, 1, 1),
+                        v,
+                        context.module.new_string_ptr("double plus right"),
+                    )
+                };
+                update_symbol_for_expression(context, &self.value, v);
+                Ok(v)
             }
         }
     }
@@ -1898,7 +1919,7 @@ impl<'a> CodeGenerator for EventDefinition {
         let return_value = unsafe {
             LLVMConstNamedStruct(event, params.as_mut_ptr(), params.len() as _)
         };
-        unsafe { LLVMBuildRet(context.builder.builder, build_uint(context, 0, 1)) };
+        unsafe { LLVMBuildRet(context.builder.builder, return_value) };
         let result = unsafe {
             LLVMVerifyFunction(function, LLVMVerifierFailureAction::LLVMPrintMessageAction)
         };
