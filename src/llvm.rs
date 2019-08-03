@@ -1380,35 +1380,37 @@ impl<'a> CodeGenerator for LeftUnaryExpression {
                 }
             }
             LeftUnaryOperator::DoubleDash => {
-                // TODO: Update symbols
                 let exp_type = self.value.typegen(context)?;
                 if unsafe { LLVMGetTypeKind(exp_type) } == LLVMTypeKind::LLVMIntegerTypeKind {
                     let int_value = self.value.codegen(context)?;
-                    Ok(unsafe {
+                    let new_value = unsafe {
                         LLVMBuildSub(
                             context.builder.builder,
                             int_value,
                             build_uint(context, 1, 1),
                             context.module.new_string_ptr("tmpsub"),
                         )
-                    })
+                    };
+                    update_symbol_for_expression(context, &self.value, new_value);
+                    Ok(new_value)
                 } else {
                     Err(CodeGenerationError::ExpectingIntegerExpression)
                 }
             }
             LeftUnaryOperator::DoublePlus => {
-                // TODO: Update symbols
                 let exp_type = self.value.typegen(context)?;
                 if unsafe { LLVMGetTypeKind(exp_type) } == LLVMTypeKind::LLVMIntegerTypeKind {
                     let int_value = self.value.codegen(context)?;
-                    Ok(unsafe {
+                    let new_value = unsafe {
                         LLVMBuildAdd(
                             context.builder.builder,
                             int_value,
                             build_uint(context, 1, 1),
                             context.module.new_string_ptr("tmpadd"),
                         )
-                    })
+                    };
+                    update_symbol_for_expression(context, &self.value, new_value);
+                    Ok(new_value)
                 } else {
                     Err(CodeGenerationError::ExpectingIntegerExpression)
                 }
