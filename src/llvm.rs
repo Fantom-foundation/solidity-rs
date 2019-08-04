@@ -1338,8 +1338,13 @@ impl<'a> CodeGenerator for FunctionCall {
     }
 }
 
-fn update_symbol_for_expression(context: &mut Context, e: &Box<Expression>, v: LLVMValueRef) {
-    // TODO: Fill this function
+fn update_symbol_for_expression(context: &mut Context, e: &Box<Expression>, v: LLVMValueRef) -> Result<(), CodeGenerationError> {
+    let id = match &**e {
+        Expression::PrimaryExpression(PrimaryExpression::Identifier(id)) => Ok(id),
+        _ => Err(CodeGenerationError::ExpectedLValue),
+    }?;
+    context.symbols.insert(id.0.to_owned(), v);
+    Ok(())
 }
 
 impl<'a> CodeGenerator for RightUnaryExpression {
@@ -1355,7 +1360,7 @@ impl<'a> CodeGenerator for RightUnaryExpression {
                         context.module.new_string_ptr("double dash right"),
                     )
                 };
-                update_symbol_for_expression(context, &self.value, v);
+                update_symbol_for_expression(context, &self.value, v)?;
                 Ok(v)
             }
             RightUnaryOperator::DoublePlus => {
@@ -1368,7 +1373,7 @@ impl<'a> CodeGenerator for RightUnaryExpression {
                         context.module.new_string_ptr("double plus right"),
                     )
                 };
-                update_symbol_for_expression(context, &self.value, v);
+                update_symbol_for_expression(context, &self.value, v)?;
                 Ok(v)
             }
         }
@@ -1408,7 +1413,7 @@ impl<'a> CodeGenerator for LeftUnaryExpression {
                             context.module.new_string_ptr("tmpsub"),
                         )
                     };
-                    update_symbol_for_expression(context, &self.value, new_value);
+                    update_symbol_for_expression(context, &self.value, new_value)?;
                     Ok(new_value)
                 } else {
                     Err(CodeGenerationError::ExpectingIntegerExpression)
@@ -1426,7 +1431,7 @@ impl<'a> CodeGenerator for LeftUnaryExpression {
                             context.module.new_string_ptr("tmpadd"),
                         )
                     };
-                    update_symbol_for_expression(context, &self.value, new_value);
+                    update_symbol_for_expression(context, &self.value, new_value)?;
                     Ok(new_value)
                 } else {
                     Err(CodeGenerationError::ExpectingIntegerExpression)
