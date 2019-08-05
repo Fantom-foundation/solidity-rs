@@ -1,22 +1,7 @@
 use crate::parser::*;
 use failure::Error;
 use llvm_sys::analysis::{LLVMVerifierFailureAction, LLVMVerifyFunction};
-use llvm_sys::core::{
-    LLVMAddFunction, LLVMAddIncoming, LLVMAppendBasicBlock, LLVMAppendBasicBlockInContext,
-    LLVMArrayType, LLVMBasicBlockAsValue, LLVMBuildAShr, LLVMBuildAdd, LLVMBuildAnd, LLVMBuildBr,
-    LLVMBuildCall, LLVMBuildCondBr, LLVMBuildFAdd, LLVMBuildFCmp, LLVMBuildFDiv, LLVMBuildFMul,
-    LLVMBuildFRem, LLVMBuildFSub, LLVMBuildGlobalStringPtr, LLVMBuildICmp, LLVMBuildInsertElement,
-    LLVMBuildMul, LLVMBuildNeg, LLVMBuildOr, LLVMBuildPhi, LLVMBuildRet, LLVMBuildSDiv,
-    LLVMBuildSRem, LLVMBuildShl, LLVMBuildSub, LLVMBuildXor, LLVMConstArray, LLVMConstInt,
-    LLVMConstIntGetZExtValue, LLVMConstNamedStruct, LLVMConstNull, LLVMConstStruct,
-    LLVMConstStructInContext, LLVMConstUIToFP, LLVMContextCreate, LLVMContextDispose,
-    LLVMCreateBuilderInContext, LLVMDisposeBuilder, LLVMDisposeModule, LLVMFunctionType,
-    LLVMGetBasicBlockParent, LLVMGetInsertBlock, LLVMGetIntTypeWidth, LLVMGetParam, LLVMGetParams,
-    LLVMGetReturnType, LLVMGetTypeKind, LLVMInsertBasicBlockInContext, LLVMIntTypeInContext,
-    LLVMModuleCreateWithNameInContext, LLVMPointerType, LLVMPositionBuilderAtEnd,
-    LLVMStructCreateNamed, LLVMStructSetBody, LLVMStructType, LLVMStructTypeInContext, LLVMTypeOf,
-    LLVMValueAsBasicBlock, LLVMVoidType,
-};
+use llvm_sys::core::{LLVMAddFunction, LLVMAddIncoming, LLVMAppendBasicBlock, LLVMAppendBasicBlockInContext, LLVMArrayType, LLVMBasicBlockAsValue, LLVMBuildAShr, LLVMBuildAdd, LLVMBuildAnd, LLVMBuildBr, LLVMBuildCall, LLVMBuildCondBr, LLVMBuildFAdd, LLVMBuildFCmp, LLVMBuildFDiv, LLVMBuildFMul, LLVMBuildFRem, LLVMBuildFSub, LLVMBuildGlobalStringPtr, LLVMBuildICmp, LLVMBuildInsertElement, LLVMBuildMul, LLVMBuildNeg, LLVMBuildOr, LLVMBuildPhi, LLVMBuildRet, LLVMBuildSDiv, LLVMBuildSRem, LLVMBuildShl, LLVMBuildSub, LLVMBuildXor, LLVMConstArray, LLVMConstInt, LLVMConstIntGetZExtValue, LLVMConstNamedStruct, LLVMConstNull, LLVMConstStruct, LLVMConstStructInContext, LLVMConstUIToFP, LLVMContextCreate, LLVMContextDispose, LLVMCreateBuilderInContext, LLVMDisposeBuilder, LLVMDisposeModule, LLVMFunctionType, LLVMGetBasicBlockParent, LLVMGetInsertBlock, LLVMGetIntTypeWidth, LLVMGetParam, LLVMGetParams, LLVMGetReturnType, LLVMGetTypeKind, LLVMInsertBasicBlockInContext, LLVMIntTypeInContext, LLVMModuleCreateWithNameInContext, LLVMPointerType, LLVMPositionBuilderAtEnd, LLVMStructCreateNamed, LLVMStructSetBody, LLVMStructType, LLVMStructTypeInContext, LLVMTypeOf, LLVMValueAsBasicBlock, LLVMVoidType, LLVMBuildExtractElement};
 use llvm_sys::prelude::*;
 use llvm_sys::{LLVMBuilder, LLVMIntPredicate, LLVMModule, LLVMRealPredicate, LLVMTypeKind};
 use std::collections::HashMap;
@@ -1341,6 +1326,18 @@ impl<'a> CodeGenerator for FunctionCall {
 fn update_symbol_for_expression(context: &mut Context, e: &Box<Expression>, v: LLVMValueRef) -> Result<(), CodeGenerationError> {
     let id = match &**e {
         Expression::PrimaryExpression(PrimaryExpression::Identifier(id)) => Ok(id),
+        Expression::IndexAccess(array, index) => {
+            let array_value = array.codegen(context)?;
+            let index_value = index.codegen(context)?;
+            unsafe {
+                LLVMBuildExtractElement(
+                    context.builder.builder,
+                    array_value,
+                    index_value,
+                    context.module.new_string_ptr("Get element from array"),
+                )
+            }
+        },
         _ => Err(CodeGenerationError::ExpectedLValue),
     }?;
     context.symbols.insert(id.0.to_owned(), v);
