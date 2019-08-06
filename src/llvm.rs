@@ -1,7 +1,7 @@
 use crate::parser::*;
 use failure::Error;
 use llvm_sys::analysis::{LLVMVerifierFailureAction, LLVMVerifyFunction};
-use llvm_sys::core::{LLVMAddFunction, LLVMAddIncoming, LLVMAppendBasicBlock, LLVMAppendBasicBlockInContext, LLVMArrayType, LLVMBasicBlockAsValue, LLVMBuildAShr, LLVMBuildAdd, LLVMBuildAnd, LLVMBuildBr, LLVMBuildCall, LLVMBuildCondBr, LLVMBuildFAdd, LLVMBuildFCmp, LLVMBuildFDiv, LLVMBuildFMul, LLVMBuildFRem, LLVMBuildFSub, LLVMBuildGlobalStringPtr, LLVMBuildICmp, LLVMBuildInsertElement, LLVMBuildMul, LLVMBuildNeg, LLVMBuildOr, LLVMBuildPhi, LLVMBuildRet, LLVMBuildSDiv, LLVMBuildSRem, LLVMBuildShl, LLVMBuildSub, LLVMBuildXor, LLVMConstArray, LLVMConstInt, LLVMConstIntGetZExtValue, LLVMConstNamedStruct, LLVMConstNull, LLVMConstStruct, LLVMConstStructInContext, LLVMConstUIToFP, LLVMContextCreate, LLVMContextDispose, LLVMCreateBuilderInContext, LLVMDisposeBuilder, LLVMDisposeModule, LLVMFunctionType, LLVMGetBasicBlockParent, LLVMGetInsertBlock, LLVMGetIntTypeWidth, LLVMGetParam, LLVMGetParams, LLVMGetReturnType, LLVMGetTypeKind, LLVMInsertBasicBlockInContext, LLVMIntTypeInContext, LLVMModuleCreateWithNameInContext, LLVMPointerType, LLVMPositionBuilderAtEnd, LLVMStructCreateNamed, LLVMStructSetBody, LLVMStructType, LLVMStructTypeInContext, LLVMTypeOf, LLVMValueAsBasicBlock, LLVMVoidType, LLVMBuildExtractElement};
+use llvm_sys::core::{LLVMAddFunction, LLVMAddIncoming, LLVMAppendBasicBlock, LLVMAppendBasicBlockInContext, LLVMArrayType, LLVMBasicBlockAsValue, LLVMBuildAShr, LLVMBuildAdd, LLVMBuildAnd, LLVMBuildBr, LLVMBuildCall, LLVMBuildCondBr, LLVMBuildFAdd, LLVMBuildFCmp, LLVMBuildFDiv, LLVMBuildFMul, LLVMBuildFRem, LLVMBuildFSub, LLVMBuildGlobalStringPtr, LLVMBuildICmp, LLVMBuildInsertElement, LLVMBuildMul, LLVMBuildNeg, LLVMBuildOr, LLVMBuildPhi, LLVMBuildRet, LLVMBuildSDiv, LLVMBuildSRem, LLVMBuildShl, LLVMBuildSub, LLVMBuildXor, LLVMConstArray, LLVMConstInt, LLVMConstIntGetZExtValue, LLVMConstNamedStruct, LLVMConstNull, LLVMConstStruct, LLVMConstStructInContext, LLVMConstUIToFP, LLVMContextCreate, LLVMContextDispose, LLVMCreateBuilderInContext, LLVMDisposeBuilder, LLVMDisposeModule, LLVMFunctionType, LLVMGetBasicBlockParent, LLVMGetInsertBlock, LLVMGetIntTypeWidth, LLVMGetParam, LLVMGetParams, LLVMGetReturnType, LLVMGetTypeKind, LLVMInsertBasicBlockInContext, LLVMIntTypeInContext, LLVMModuleCreateWithNameInContext, LLVMPointerType, LLVMPositionBuilderAtEnd, LLVMStructCreateNamed, LLVMStructSetBody, LLVMStructType, LLVMStructTypeInContext, LLVMTypeOf, LLVMValueAsBasicBlock, LLVMVoidType, LLVMBuildExtractElement, LLVMBuildExtractValue};
 use llvm_sys::prelude::*;
 use llvm_sys::{LLVMBuilder, LLVMIntPredicate, LLVMModule, LLVMRealPredicate, LLVMTypeKind};
 use std::collections::HashMap;
@@ -106,6 +106,10 @@ pub enum CodeGenerationError {
     NoLoopActive,
     #[fail(display = "Function was not in parameters")]
     NoParameterInContext,
+    #[fail(display = "Struct not defined yet")]
+    StructNotDefined,
+    #[fail(display = "Member not in struct")]
+    MemberNotInStruct,
 }
 
 pub struct Context {
@@ -118,6 +122,7 @@ pub struct Context {
     function_modifiers_stack: Vec<LLVMValueRef>,
     function_parameters: HashMap<LLVMValueRef, Vec<Parameter>>,
     loop_stack: Vec<(LLVMBasicBlockRef, LLVMBasicBlockRef)>,
+    structs: HashMap<LLVMTypeRef, Vec<Identifier>>,
 }
 
 impl Context {
@@ -133,6 +138,7 @@ impl Context {
             function_modifiers_stack: Vec::new(),
             function_parameters: HashMap::new(),
             loop_stack: Vec::new(),
+            structs: HashMap::new(),
         })
     }
     pub fn print_to_file(&self, _file: &str) -> Result<(), Vec<String>> {
@@ -1324,24 +1330,44 @@ impl<'a> CodeGenerator for FunctionCall {
 }
 
 fn update_symbol_for_expression(context: &mut Context, e: &Box<Expression>, v: LLVMValueRef) -> Result<(), CodeGenerationError> {
-    let id = match &**e {
-        Expression::PrimaryExpression(PrimaryExpression::Identifier(id)) => Ok(id),
+    match &**e {
+        Expression::PrimaryExpression(PrimaryExpression::Identifier(id)) => {
+            context.symbols.insert(id.0.to_owned(), v);
+            Ok(())
+        },
         Expression::IndexAccess(array, index) => {
             let array_value = array.codegen(context)?;
             let index_value = index.codegen(context)?;
             unsafe {
-                LLVMBuildExtractElement(
+                LLVMBuildInsertElement(
                     context.builder.builder,
                     array_value,
+                    v,
                     index_value,
                     context.module.new_string_ptr("Get element from array"),
                 )
-            }
+            };
+            Ok(())
+        },
+        Expression::MemberAccess(s, member) => {
+            let struct_type = s.typegen(context)?;
+            let struct_value = s.codegen(context)?;
+            let struct_attrs = context.structs.get(&struct_type)
+                .ok_or(CodeGenerationError::StructNotDefined)?;
+            let index = struct_attrs.iter().position(|m| m == member).ok_or(CodeGenerationError::MemberNotInStruct)?;
+            unsafe {
+                LLVMBuildInsertElement(
+                    context.builder.builder,
+                    struct_value,
+                    v,
+                    build_uint(context, index as u64, 32),
+                    context.module.new_string_ptr("extract element from struct")
+                )
+            };
+            Ok(())
         },
         _ => Err(CodeGenerationError::ExpectedLValue),
-    }?;
-    context.symbols.insert(id.0.to_owned(), v);
-    Ok(())
+    }
 }
 
 impl<'a> CodeGenerator for RightUnaryExpression {
@@ -1636,6 +1662,8 @@ impl TypeGenerator for StructDefinition {
                 LLVM_TRUE,
             )
         };
+        let attributes = self.variables.0.iter().map(|v| v.identifier.clone()).collect::<Vec<Identifier>>();
+        context.structs.insert(ty.clone(), attributes);
         context
             .type_symbols
             .insert(self.name.as_str().to_string(), ty);

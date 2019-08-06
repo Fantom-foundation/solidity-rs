@@ -1248,7 +1248,7 @@ pub struct NameValue {
     pub value: Box<Expression>,
 }
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq)]
 pub struct Identifier(pub String);
 
 impl Identifier {
