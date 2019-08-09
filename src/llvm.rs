@@ -6,14 +6,14 @@ use llvm_sys::core::{
     LLVMArrayType, LLVMBasicBlockAsValue, LLVMBuildAShr, LLVMBuildAdd, LLVMBuildAnd, LLVMBuildBr,
     LLVMBuildCall, LLVMBuildCondBr, LLVMBuildExtractElement, LLVMBuildExtractValue, LLVMBuildFAdd,
     LLVMBuildFCmp, LLVMBuildFDiv, LLVMBuildFMul, LLVMBuildFRem, LLVMBuildFSub, LLVMBuildFree,
-    LLVMBuildGlobalStringPtr, LLVMBuildICmp, LLVMBuildInsertElement, LLVMBuildMul, LLVMBuildNeg,
-    LLVMBuildOr, LLVMBuildPhi, LLVMBuildRet, LLVMBuildSDiv, LLVMBuildSRem, LLVMBuildShl,
-    LLVMBuildSub, LLVMBuildXor, LLVMConstArray, LLVMConstInt, LLVMConstIntGetZExtValue,
-    LLVMConstNamedStruct, LLVMConstNull, LLVMConstStruct, LLVMConstStructInContext,
-    LLVMConstUIToFP, LLVMContextCreate, LLVMContextDispose, LLVMCreateBuilderInContext,
-    LLVMDisposeBuilder, LLVMDisposeModule, LLVMFunctionType, LLVMGetBasicBlockParent,
-    LLVMGetInsertBlock, LLVMGetIntTypeWidth, LLVMGetParam, LLVMGetParams, LLVMGetReturnType,
-    LLVMGetTypeKind, LLVMInsertBasicBlockInContext, LLVMIntTypeInContext,
+    LLVMBuildGlobalStringPtr, LLVMBuildICmp, LLVMBuildInsertElement, LLVMBuildInsertValue,
+    LLVMBuildMul, LLVMBuildNeg, LLVMBuildOr, LLVMBuildPhi, LLVMBuildRet, LLVMBuildSDiv,
+    LLVMBuildSRem, LLVMBuildShl, LLVMBuildSub, LLVMBuildXor, LLVMConstArray, LLVMConstInt,
+    LLVMConstIntGetZExtValue, LLVMConstNamedStruct, LLVMConstNull, LLVMConstStruct,
+    LLVMConstStructInContext, LLVMConstUIToFP, LLVMContextCreate, LLVMContextDispose,
+    LLVMCreateBuilderInContext, LLVMDisposeBuilder, LLVMDisposeModule, LLVMFunctionType,
+    LLVMGetBasicBlockParent, LLVMGetInsertBlock, LLVMGetIntTypeWidth, LLVMGetParam, LLVMGetParams,
+    LLVMGetReturnType, LLVMGetTypeKind, LLVMInsertBasicBlockInContext, LLVMIntTypeInContext,
     LLVMModuleCreateWithNameInContext, LLVMPointerType, LLVMPositionBuilderAtEnd,
     LLVMStructCreateNamed, LLVMStructSetBody, LLVMStructType, LLVMStructTypeInContext, LLVMTypeOf,
     LLVMValueAsBasicBlock, LLVMVoidType,
@@ -1538,10 +1538,8 @@ impl<'a> CodeGenerator for LeftUnaryExpression {
                     Err(CodeGenerationError::ExpectingIntegerExpression)
                 }
             }
-            // TODO: Update symbols
             LeftUnaryOperator::Delete => {
                 let delete_value = self.value.codegen(context)?;
-                // TODO: Finish this
                 match &*self.value {
                     Expression::PrimaryExpression(PrimaryExpression::Identifier(id)) => {
                         let delete_type = self.typegen(context)?;
@@ -1557,7 +1555,16 @@ impl<'a> CodeGenerator for LeftUnaryExpression {
                         }
                         context.symbols.remove(id.as_str());
                     }
-                    Expression::IndexAccess(_c, _e) => {}
+                    Expression::IndexAccess(c, e) => {
+                        let container_type = c.typegen(context)?;
+                        let container_kind = unsafe { LLVMGetTypeKind(container_type) };
+                        match container_kind {
+                            LLVMTypeKind::LLVMStructTypeKind => {
+                                // TODO: Delete from dictionary
+                            }
+                            _ => {}
+                        }
+                    }
                     _ => {}
                 };
                 Ok(build_uint(context, 0, 1))
@@ -2304,7 +2311,31 @@ impl BinaryExpression {
                 };
                 Ok(())
             }
-            // TODO: Side effect for dictionaries and structs too
+            Expression::MemberAccess(obj, mem) => {
+                let container_type = obj.typegen(context)?;
+                let members = context
+                    .structs
+                    .get(&container_type)
+                    .ok_or(CodeGenerationError::StructNotDefined)?;
+                let member_index = members
+                    .iter()
+                    .position(|i| i == mem)
+                    .ok_or(CodeGenerationError::MemberNotInStruct)?;
+                let container = obj.codegen(context)?;
+                unsafe {
+                    LLVMBuildInsertValue(
+                        context.builder.builder,
+                        container,
+                        value,
+                        member_index as _,
+                        context
+                            .module
+                            .new_string_ptr("Update object in expression assignment"),
+                    )
+                };
+                Ok(())
+            }
+            // TODO: Side effect for dictionaries
             _ => Err(CodeGenerationError::ExpectedLValue),
         }?;
         Ok(value)
