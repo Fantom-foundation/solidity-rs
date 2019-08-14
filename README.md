@@ -1,6 +1,6 @@
 solidity-rs
 ===========
-[Solidity](https://github.com/ethereum/solidity) implementation in Rust.
+[Solidity](https://github.com/ethereum/solidity) to LLVM implementation in Rust.
 
 ## Developer guide
 
@@ -28,3 +28,14 @@ $ cargo test
 # Format, build and test
 $ cargo make
 ```
+### TODO
+
+[ ] Add support for arbitrary size integers.
+[ ] Add support for arbitrary mantisa floating point numbers.
+[ ] Create a stack of events to push them to once emitted.
+[ ] Add support for dictionaries.
+[ ] Add support for dynamic size arrays.
+[ ] Add support for assembler expressions.
+[ ] Add support for storage specification in functions.
+[ ] Add support for importing other libraries.
+[ ] Add tests.
