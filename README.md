@@ -1,5 +1,7 @@
 solidity-rs
 ===========
+![Rust: nightly](https://img.shields.io/badge/Rust-nightly-blue.svg) ![License: MIT](https://img.shields.io/badge/License-MIT-green.svg) [![Build Status](https://travis-ci.org/Fantom-foundation/evm-rs.svg?branch=master)](https://travis-ci.org/Fantom-foundation/evm-rs)
+
 [Solidity](https://github.com/ethereum/solidity) to LLVM implementation in Rust.
 
 ## Developer guide
@@ -13,7 +15,7 @@ There are plenty of [IDEs](https://areweideyet.com) and other [Rust development 
 ### Step-by-step guide
 ```bash
 # Install Rust (nightly)
-$ curl https://sh.rustup.rs -sSf | sh -s -- --default-toolchain nightly
+$ curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- --default-toolchain nightly
 # Install cargo-make (cross-platform feature-rich reimplementation of Make)
 $ cargo install --force cargo-make
 # Install rustfmt (Rust formatter)
